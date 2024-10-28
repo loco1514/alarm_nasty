@@ -49,34 +49,43 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0") // Updated
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2") // Updated
-    implementation("androidx.activity:activity-compose:1.8.0") // Updated
+    // Core libraries
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.activity:activity-compose:1.8.0")
 
     // Coroutine support
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0") // Ensure the latest version
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.0") // Ensure the latest version
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Compose BOM
-    implementation(platform("androidx.compose:compose-bom:2024.01.00")) // New BOM version
+    implementation(platform("androidx.compose:compose-bom:2024.01.00"))
 
+    // Core Compose dependencies
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3:1.2.0")
+    implementation("androidx.compose.foundation:foundation:1.5.1")
 
-    implementation("androidx.compose.material3:material3:1.2.0") // Latest stable version of Material3
-    implementation("androidx.compose.foundation:foundation:1.5.1") // Latest version Foundation
-    implementation("org.jsoup:jsoup:1.16.1") // Latest version Jsoup
+    // Material Icons dependencies
+    implementation("androidx.compose.material:material-icons-core:1.5.0")
+    implementation("androidx.compose.material:material-icons-extended:1.5.0")
+
+    // Jsoup for HTML parsing
+    implementation("org.jsoup:jsoup:1.16.1")
 
     // Navigation Component (if needed)
-    implementation("androidx.navigation:navigation-compose:2.5.3") // Latest version
+    implementation("androidx.navigation:navigation-compose:2.5.3")
+
+    // DataStore and Gson
     implementation("androidx.datastore:datastore-preferences:1.0.0")
-    implementation("com.google.code.gson:gson:2.8.8") // или последняя версия Gson
-    implementation("org.jsoup:jsoup:1.13.1") // для парсинга HTML
+    implementation("com.google.code.gson:gson:2.8.8")
 
     // ViewModel support
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2") // Latest version
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
+    // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
@@ -88,3 +97,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+
+
+

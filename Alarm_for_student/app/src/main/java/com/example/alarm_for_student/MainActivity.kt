@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -24,11 +25,20 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.select.Elements
 import java.lang.reflect.Type
 import java.time.LocalDate
+import androidx.compose.material3.Icon // Import this for Icons
+import androidx.compose.material3.IconButton // Ensure this is imported too
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Menu
+
 
 data class Lesson(
     val time: String,
@@ -55,15 +65,101 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             Alarm_for_studentTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    GroupScheduleScreen(sharedPreferences)
-                }
+                MainScreen(sharedPreferences)
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(sharedPreferences: SharedPreferences) {
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope() // Make sure this is defined
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        drawerContent = {
+            ModalDrawerSheet {
+                DrawerContent(
+                    onCloseDrawer = {
+                        coroutineScope.launch {
+                            drawerState.close() // Use coroutineScope.launch
+                        }
+                    },
+                    onItemSelected = { selectedItem ->
+                        when (selectedItem) {
+                            "Настройки" -> {
+                                // Handle settings navigation
+                            }
+                            "О приложении" -> {
+                                // Handle about navigation
+                            }
+                        }
+                        coroutineScope.launch {
+                            drawerState.close()
+                        }
+                    }
+                )
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Расписание студентов") },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            coroutineScope.launch {
+                                drawerState.open()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Меню")
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Box(modifier = Modifier.padding(innerPadding)) {
+                GroupScheduleScreen(sharedPreferences)
+            }
+        }
+    }
+}
+
+
+
+
+@Composable
+fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
+    Column {
+        Text(
+            text = "Меню",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(16.dp)
+        )
+        Divider()
+        DrawerItem("Расписание преподавателей", onItemSelected, onCloseDrawer)
+        DrawerItem("Будильник", onItemSelected, onCloseDrawer)
+        DrawerItem("Настройки", onItemSelected, onCloseDrawer)
+        DrawerItem("О приложении", onItemSelected, onCloseDrawer)
+        // Add more items as needed
+    }
+}
+
+@Composable
+fun DrawerItem(title: String, onItemSelected: (String) -> Unit, onCloseDrawer: () -> Unit) {
+    Text(
+        text = title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                onItemSelected(title)
+                onCloseDrawer()
+            }
+            .padding(16.dp)
+    )
 }
 
 @Composable
@@ -74,12 +170,12 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     var showDialog by remember { mutableStateOf(false) }
     val gson = Gson()
 
-    // Загрузка сохранённой группы и расписания из SharedPreferences
+    // Load saved group and schedule from SharedPreferences
     LaunchedEffect(Unit) {
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
         groups = fetchGroups()
 
-        // Десериализация расписания из JSON
+        // Deserialize schedule from JSON
         val daySchedulesJson = sharedPreferences.getString("daySchedules", null)
         val type: Type = object : TypeToken<List<DaySchedule>>() {}.type
         if (daySchedulesJson != null) {
@@ -93,7 +189,7 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
         }
     }
 
-    // Обновление расписания при изменении выбранной группы
+    // Update schedule when selected group changes
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let {
             daySchedules = fetchSchedule(it.link)

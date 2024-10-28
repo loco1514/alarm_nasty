@@ -6,12 +6,9 @@
     android:padding="16dp">
 
     <TextView
-        android:id="@+id/scheduleTextView"
+        android:id="@+id/textViewSchedule"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:padding="8dp"
-        android:background="@android:color/background_light"
-        android:scrollbars="vertical" />
-
+        android:textSize="18sp"
+        android:text="Расписание будет загружено здесь" />
 </LinearLayout>
