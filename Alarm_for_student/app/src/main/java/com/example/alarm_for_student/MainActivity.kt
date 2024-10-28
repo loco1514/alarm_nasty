@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(sharedPreferences: SharedPreferences) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val coroutineScope = rememberCoroutineScope() // Make sure this is defined
+    val coroutineScope = rememberCoroutineScope()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -84,18 +84,16 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
             ModalDrawerSheet {
                 DrawerContent(
                     onCloseDrawer = {
+                        Log.d("MainScreen", "Закрытие бокового меню")
                         coroutineScope.launch {
-                            drawerState.close() // Use coroutineScope.launch
+                            drawerState.close()
                         }
                     },
                     onItemSelected = { selectedItem ->
+                        Log.d("MainScreen", "Выбран пункт меню: $selectedItem")
                         when (selectedItem) {
-                            "Настройки" -> {
-                                // Handle settings navigation
-                            }
-                            "О приложении" -> {
-                                // Handle about navigation
-                            }
+                            "Настройки" -> Log.i("MainScreen", "Переход к экрану 'Настройки'")
+                            "О приложении" -> Log.i("MainScreen", "Переход к экрану 'О приложении'")
                         }
                         coroutineScope.launch {
                             drawerState.close()
@@ -111,6 +109,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                     title = { Text("Расписание студентов") },
                     navigationIcon = {
                         IconButton(onClick = {
+                            Log.d("MainScreen", "Открытие бокового меню")
                             coroutineScope.launch {
                                 drawerState.open()
                             }
@@ -128,9 +127,6 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
     }
 }
 
-
-
-
 @Composable
 fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
     Column {
@@ -144,7 +140,6 @@ fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
         DrawerItem("Будильник", onItemSelected, onCloseDrawer)
         DrawerItem("Настройки", onItemSelected, onCloseDrawer)
         DrawerItem("О приложении", onItemSelected, onCloseDrawer)
-        // Add more items as needed
     }
 }
 
@@ -155,6 +150,7 @@ fun DrawerItem(title: String, onItemSelected: (String) -> Unit, onCloseDrawer: (
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
+                Log.d("DrawerItem", "Нажатие на элемент меню: $title")
                 onItemSelected(title)
                 onCloseDrawer()
             }
@@ -170,30 +166,39 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     var showDialog by remember { mutableStateOf(false) }
     val gson = Gson()
 
-    // Load saved group and schedule from SharedPreferences
     LaunchedEffect(Unit) {
+        Log.i("GroupScheduleScreen", "Инициализация экрана расписания")
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
         groups = fetchGroups()
+        Log.d("GroupScheduleScreen", "Загружено ${groups.size} групп")
 
-        // Deserialize schedule from JSON
         val daySchedulesJson = sharedPreferences.getString("daySchedules", null)
         val type: Type = object : TypeToken<List<DaySchedule>>() {}.type
         if (daySchedulesJson != null) {
             daySchedules = gson.fromJson(daySchedulesJson, type)
+            Log.d("GroupScheduleScreen", "Загружено расписание из SharedPreferences")
         }
 
         selectedGroup = groups.find { it.name == savedGroupName }
+        // Только если расписание пусто и группа сохранена, загружаем с сайта
         if (daySchedules.isEmpty() && selectedGroup != null) {
             daySchedules = fetchSchedule(selectedGroup!!.link)
             saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
+            Log.i("GroupScheduleScreen", "Загружено расписание с сервера для группы ${selectedGroup!!.name}")
         }
     }
 
-    // Update schedule when selected group changes
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let {
-            daySchedules = fetchSchedule(it.link)
-            saveScheduleToPreferences(sharedPreferences, it.name, daySchedules, gson)
+            // Проверка, отличается ли выбранная группа от сохраненной
+            val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
+            if (it.name != savedGroupName) {
+                Log.d("GroupScheduleScreen", "Выбрана новая группа: ${it.name}")
+                daySchedules = fetchSchedule(it.link)
+                saveScheduleToPreferences(sharedPreferences, it.name, daySchedules, gson)
+            } else {
+                Log.d("GroupScheduleScreen", "Используется сохраненное расписание для группы: ${it.name}")
+            }
         }
     }
 
@@ -213,6 +218,7 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
                                 modifier = Modifier.clickable {
                                     selectedGroup = group
                                     showDialog = false
+                                    Log.d("GroupScheduleScreen", "Выбрана группа из диалога: ${group.name}")
                                 },
                                 headlineContent = { Text(text = group.name) }
                             )
@@ -236,6 +242,7 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
         }
     }
 }
+
 
 @Composable
 fun ScheduleContent(daySchedules: List<DaySchedule>) {
@@ -319,6 +326,7 @@ private suspend fun fetchGroups(): List<Group> {
                 val link = "https://rasp.ssuwt.ru${element.attr("href")}"
                 groups.add(Group(name, link))
             }
+            Log.d("ScheduleDebug", "парсинг группы")
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении групп: ${e.message}", e)
         }
@@ -356,6 +364,7 @@ private suspend fun fetchSchedule(link: String): List<DaySchedule> {
                     }
                 }
             }
+            Log.d("ScheduleDebug", "парсинг расписание")
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении расписания: ${e.message}", e)
         }
