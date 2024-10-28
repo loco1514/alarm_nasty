@@ -165,48 +165,42 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
     var showDialog by remember { mutableStateOf(false) }
     val gson = Gson()
+    val coroutineScope = rememberCoroutineScope()
 
+    // Загружаем группы и расписание при первом запуске
     LaunchedEffect(Unit) {
-        Log.i("GroupScheduleScreen", "Инициализация экрана расписания")
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
         groups = fetchGroups()
-        Log.d("GroupScheduleScreen", "Загружено ${groups.size} групп")
-
         val daySchedulesJson = sharedPreferences.getString("daySchedules", null)
         val type: Type = object : TypeToken<List<DaySchedule>>() {}.type
         if (daySchedulesJson != null) {
             daySchedules = gson.fromJson(daySchedulesJson, type)
-            Log.d("GroupScheduleScreen", "Загружено расписание из SharedPreferences")
         }
 
         selectedGroup = groups.find { it.name == savedGroupName }
-        // Только если расписание пусто и группа сохранена, загружаем с сайта
         if (daySchedules.isEmpty() && selectedGroup != null) {
             daySchedules = fetchSchedule(selectedGroup!!.link)
             saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
-            Log.i("GroupScheduleScreen", "Загружено расписание с сервера для группы ${selectedGroup!!.name}")
         }
     }
 
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let {
-            // Проверка, отличается ли выбранная группа от сохраненной
             val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
             if (it.name != savedGroupName) {
-                Log.d("GroupScheduleScreen", "Выбрана новая группа: ${it.name}")
                 daySchedules = fetchSchedule(it.link)
                 saveScheduleToPreferences(sharedPreferences, it.name, daySchedules, gson)
-            } else {
-                Log.d("GroupScheduleScreen", "Используется сохраненное расписание для группы: ${it.name}")
             }
         }
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
+        // Кнопка выбора группы
         TextButton(onClick = { showDialog = true }) {
             Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
         }
 
+        // Диалог выбора группы
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
@@ -218,7 +212,6 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
                                 modifier = Modifier.clickable {
                                     selectedGroup = group
                                     showDialog = false
-                                    Log.d("GroupScheduleScreen", "Выбрана группа из диалога: ${group.name}")
                                 },
                                 headlineContent = { Text(text = group.name) }
                             )
@@ -233,8 +226,21 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             )
         }
 
+        // Кнопка обновления расписания
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = {
+            selectedGroup?.let { group ->
+                coroutineScope.launch {
+                    daySchedules = updateSchedule(group, sharedPreferences, gson)
+                }
+            }
+        }) {
+            Text("Обновить расписание")
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Отображение расписания
         if (daySchedules.isEmpty()) {
             Text(text = "Выберите группу для отображения расписания.")
         } else {
@@ -243,6 +249,15 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     }
 }
 
+suspend fun updateSchedule(
+    group: Group,
+    sharedPreferences: SharedPreferences,
+    gson: Gson
+): List<DaySchedule> {
+    val newSchedule = fetchSchedule(group.link)
+    saveScheduleToPreferences(sharedPreferences, group.name, newSchedule, gson)
+    return newSchedule
+}
 
 @Composable
 fun ScheduleContent(daySchedules: List<DaySchedule>) {
