@@ -1,5 +1,7 @@
 package com.example.alarm_for_student
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -13,15 +15,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.alarm_for_student.ui.theme.Alarm_for_studentTheme
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.select.Elements
+import java.lang.reflect.Type
 import java.time.LocalDate
 
 data class Lesson(
@@ -30,7 +36,7 @@ data class Lesson(
     val subject: String,
     val room: String,
     val tutor: String,
-    val subgroup: String? // Поле для подгруппы
+    val subgroup: String?
 )
 
 data class DaySchedule(
@@ -41,15 +47,19 @@ data class DaySchedule(
 data class Group(val name: String, val link: String)
 
 class MainActivity : ComponentActivity() {
+    private lateinit var sharedPreferences: SharedPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+
         setContent {
             Alarm_for_studentTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    GroupScheduleScreen()
+                    GroupScheduleScreen(sharedPreferences)
                 }
             }
         }
@@ -57,45 +67,58 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun GroupScheduleScreen() {
+fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     var groups by remember { mutableStateOf(listOf<Group>()) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
     var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
     var showDialog by remember { mutableStateOf(false) }
+    val gson = Gson()
 
-    // Fetch groups on screen load
+    // Загрузка сохранённой группы и расписания из SharedPreferences
     LaunchedEffect(Unit) {
-        groups = fetchGroups() // Убедитесь, что это возвращает List<Group>
+        val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
+        groups = fetchGroups()
+
+        // Десериализация расписания из JSON
+        val daySchedulesJson = sharedPreferences.getString("daySchedules", null)
+        val type: Type = object : TypeToken<List<DaySchedule>>() {}.type
+        if (daySchedulesJson != null) {
+            daySchedules = gson.fromJson(daySchedulesJson, type)
+        }
+
+        selectedGroup = groups.find { it.name == savedGroupName }
+        if (daySchedules.isEmpty() && selectedGroup != null) {
+            daySchedules = fetchSchedule(selectedGroup!!.link)
+            saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
+        }
     }
 
-    // Update schedule when selected group changes
+    // Обновление расписания при изменении выбранной группы
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let {
-            daySchedules = fetchSchedule(it.link) // Используйте it.link правильно
+            daySchedules = fetchSchedule(it.link)
+            saveScheduleToPreferences(sharedPreferences, it.name, daySchedules, gson)
         }
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        // Button to select a group
         TextButton(onClick = { showDialog = true }) {
             Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
         }
 
-        // AlertDialog for group selection
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
                 title = { Text(text = "Выберите группу") },
                 text = {
                     LazyColumn {
-                        // Используем items для отображения списка групп
-                        items(groups) { group -> // Здесь правильно используйте items
+                        items(groups) { group ->
                             ListItem(
                                 modifier = Modifier.clickable {
-                                    selectedGroup = group // Здесь правильное присвоение
-                                    showDialog = false // Закрываем диалог
+                                    selectedGroup = group
+                                    showDialog = false
                                 },
-                                headlineContent = { Text(text = group.name) } // Доступ к полю name
+                                headlineContent = { Text(text = group.name) }
                             )
                         }
                     }
@@ -110,7 +133,6 @@ fun GroupScheduleScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Display schedule or prompt to select a group
         if (daySchedules.isEmpty()) {
             Text(text = "Выберите группу для отображения расписания.")
         } else {
@@ -118,7 +140,6 @@ fun GroupScheduleScreen() {
         }
     }
 }
-
 
 @Composable
 fun ScheduleContent(daySchedules: List<DaySchedule>) {
@@ -134,48 +155,39 @@ fun ScheduleContent(daySchedules: List<DaySchedule>) {
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        if (daySchedules.isEmpty()) {
+        sortedDays.forEach { day ->
+            val daySchedule = daySchedules.find { it.day.equals(day, ignoreCase = true) }
             item {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(text = "Нет доступного расписания.")
-                }
-            }
-        } else {
-            sortedDays.forEach { day ->
-                val daySchedule = daySchedules.find { it.day.equals(day, ignoreCase = true) }
-                item {
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                        Text(
-                            text = day,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (daySchedule != null && daySchedule.day.equals(currentDay, ignoreCase = true))
-                                MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Text(
+                        text = day,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (daySchedule != null && daySchedule.day.equals(currentDay, ignoreCase = true))
+                            MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                        if (daySchedule != null && daySchedule.lessons.isNotEmpty()) {
-                            val groupedLessons = daySchedule.lessons.groupBy { it.time }
-                            groupedLessons.forEach { (time, lessons) ->
-                                val lessonsBySubgroup = lessons.groupBy { it.subgroup ?: "Без подгруппы" }
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text(text = "Время: $time", style = MaterialTheme.typography.bodyMedium)
-                                    lessonsBySubgroup.forEach { (subgroup, subgroupLessons) ->
-                                        if (subgroupLessons.isNotEmpty()) {
-                                            Text(text = "Подгруппа: $subgroup", style = MaterialTheme.typography.bodyMedium)
-                                            subgroupLessons.forEach { lesson ->
-                                                LessonRow(lesson)
-                                            }
+                    if (daySchedule != null && daySchedule.lessons.isNotEmpty()) {
+                        val groupedLessons = daySchedule.lessons.groupBy { it.time }
+                        groupedLessons.forEach { (time, lessons) ->
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                Text(text = "Время: $time", style = MaterialTheme.typography.bodyMedium)
+                                lessons.groupBy { it.subgroup ?: "Без подгруппы" }.forEach { (subgroup, subgroupLessons) ->
+                                    if (subgroupLessons.isNotEmpty()) {
+                                        Text(text = "Подгруппа: $subgroup", style = MaterialTheme.typography.bodyMedium)
+                                        subgroupLessons.forEach { lesson ->
+                                            LessonRow(lesson)
                                         }
                                     }
                                 }
                             }
-                        } else {
-                            Text(
-                                text = "Уроков нет.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
                         }
+                    } else {
+                        Text(
+                            text = "Уроков нет.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
                     }
                 }
             }
@@ -221,21 +233,16 @@ private suspend fun fetchGroups(): List<Group> {
 private suspend fun fetchSchedule(link: String): List<DaySchedule> {
     return withContext(Dispatchers.IO) {
         val daySchedulesMap = mutableMapOf<String, MutableList<Lesson>>()
-
         try {
             val doc: Document = Jsoup.connect(link).get()
             val rows: Elements = doc.select("tr")
-
             for (row in rows) {
                 val cells = row.select("td")
                 if (cells.isEmpty()) continue
                 val time = cells.getOrNull(0)?.text()?.trim() ?: "Нет данных"
-                Log.d("ScheduleDebug", "Time: $time")
-
                 cells.forEachIndexed { index, cell ->
                     val lessonInfo = cell.text().trim()
-                    Log.d("ScheduleDebug", "Lesson Info: $lessonInfo")
-                    if (lessonInfo.isEmpty()) return@forEachIndexed // Пропускаем пустые ячейки
+                    if (lessonInfo.isEmpty()) return@forEachIndexed
                     val day = when (index) {
                         1 -> "Понедельник"
                         2 -> "Вторник"
@@ -246,8 +253,6 @@ private suspend fun fetchSchedule(link: String): List<DaySchedule> {
                         7 -> "Воскресенье"
                         else -> return@forEachIndexed
                     }
-
-                    // Получаем список уроков
                     val lessons = parseLessonInfo(lessonInfo)
                     lessons.forEach { lesson ->
                         val lessonWithTime = lesson.copy(time = time)
@@ -258,68 +263,44 @@ private suspend fun fetchSchedule(link: String): List<DaySchedule> {
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении расписания: ${e.message}", e)
         }
-
         daySchedulesMap.map { DaySchedule(it.key, it.value) }
     }
 }
 
 private fun parseLessonInfo(lessonInfo: String): List<Lesson> {
-    Log.d("ScheduleDebug", "Parsing lesson info: $lessonInfo")
-
-    if (lessonInfo.isBlank()) {
-        return listOf(
-            Lesson(
-                time = "Неизвестно",
-                type = "Тип урока",
-                subject = "Нет данных",
-                room = "Нет данных",
-                tutor = "Нет данных",
-                subgroup = null
-            )
-        )
-    }
-
     val regex = Regex(
-        """(?<type>лаб|лек|пр)\s+(?<subject>.+?)\s+(?<room>\d+/\w+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s[А-ЯЁ]\.\s?[А-ЯЁ]\.)\s*(?<subgroup>\d+\s*п/г)?"""
+        """(?<type>лаб|лек|пр)\s+(?<subject>.+?)\s+(?<room>\d+/\w+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.[А-ЯЁ]\.)\s+(подгруппа\s+(?<subgroup>\d+))?"""
     )
-
-    val matches = regex.findAll(lessonInfo)
-
-    val lessons = mutableListOf<Lesson>()
-
-    for (match in matches) {
-        val type = match.groups["type"]?.value?.trim() ?: "Тип урока"
-        val subject = match.groups["subject"]?.value?.trim() ?: "Нет данных"
-        val room = match.groups["room"]?.value?.trim() ?: "Нет данных"
-        val tutor = match.groups["tutor"]?.value?.trim() ?: "Нет данных"
-        val subgroup = match.groups["subgroup"]?.value?.trim()
-
-        Log.d(
-            "ScheduleDebug",
-            "Parsed subject: $subject, room: $room, tutor: $tutor, subgroup: $subgroup"
+    return regex.findAll(lessonInfo).map { match ->
+        Lesson(
+            time = "",
+            type = match.groups["type"]?.value ?: "Неизвестно",
+            subject = match.groups["subject"]?.value ?: "Неизвестно",
+            room = match.groups["room"]?.value ?: "Неизвестно",
+            tutor = match.groups["tutor"]?.value ?: "Неизвестно",
+            subgroup = match.groups["subgroup"]?.value
         )
+    }.toList()
+}
 
-        val subgroupValue = subgroup ?: "Без подгруппы"
-
-        lessons.add(
-            Lesson(
-                time = "Неизвестно",
-                type = type,
-                subject = subject,
-                room = room,
-                tutor = tutor,
-                subgroup = subgroupValue
-            )
-        )
-    }
-
-    return lessons
+// Функция для сохранения расписания в SharedPreferences
+private fun saveScheduleToPreferences(
+    sharedPreferences: SharedPreferences,
+    groupName: String,
+    daySchedules: List<DaySchedule>,
+    gson: Gson
+) {
+    val daySchedulesJson = gson.toJson(daySchedules)
+    sharedPreferences.edit().putString("selectedGroupName", groupName).apply()
+    sharedPreferences.edit().putString("daySchedules", daySchedulesJson).apply()
 }
 
 @Preview(showBackground = true)
 @Composable
 fun GroupSchedulePreview() {
+    val context = LocalContext.current
+    val sharedPreferences = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
     Alarm_for_studentTheme {
-        GroupScheduleScreen()
+        GroupScheduleScreen(sharedPreferences)
     }
 }
