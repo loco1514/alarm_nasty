@@ -59,7 +59,9 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Расписание студентов") },
+                    title = {
+                        Text(if (showTeacherSchedule) "Расписание преподавателей" else "Расписание студентов")
+                    },
                     navigationIcon = {
                         IconButton(onClick = {
                             coroutineScope.launch { drawerState.open() }
@@ -80,6 +82,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
         }
     }
 }
+
 
 @Composable
 fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
