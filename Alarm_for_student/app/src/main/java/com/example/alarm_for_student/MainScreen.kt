@@ -13,7 +13,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 
-// MainScreen updated to pass SharedPreferences correctly
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(sharedPreferences: SharedPreferences) {
@@ -70,14 +69,13 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
             Box(modifier = Modifier.padding(innerPadding)) {
                 when {
                     showTeacherSchedule -> TeacherListScreen(sharedPreferences)
-                    title == "Настройки" -> SettingsScreen() // Navigate to Settings screen
+                    title == "Настройки" -> SettingsScreen(sharedPreferences) // Pass sharedPreferences to SettingsScreen
                     else -> GroupScheduleScreen(sharedPreferences)
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
