@@ -31,7 +31,31 @@ fun LessonRowTeacher(lesson: Lesson) {
 fun ScheduleContent(lessons: List<Lesson>) {
     LazyColumn(modifier = Modifier.padding(16.dp)) {
         items(lessons) { lesson ->
-            LessonRowTeacher(lesson) // Call the LessonRow function
+            LessonRowTeacher(lesson)
+        }
+    }
+}
+
+@Composable
+fun ScheduleByDayContent(schedule: List<DaySchedule>) {
+    LazyColumn {
+        items(schedule) { daySchedule ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                shape = RoundedCornerShape(8.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(text = daySchedule.day, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // Display each lesson in this day
+                    daySchedule.lessons.forEach { lesson ->
+                        Text(text = "${lesson.time} - ${lesson.subject} (Кабинет: ${lesson.room})")
+                    }
+                }
+            }
         }
     }
 }

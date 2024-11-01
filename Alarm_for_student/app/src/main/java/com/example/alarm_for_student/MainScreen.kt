@@ -13,10 +13,10 @@ import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 
+// MainScreen updated to pass SharedPreferences correctly
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(sharedPreferences: SharedPreferences) {
-    // Example Drawer and state management code
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     var showTeacherSchedule by remember { mutableStateOf(false) }
@@ -42,6 +42,9 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                     showTeacherSchedule = true
                                     title = "Расписание преподавателей"
                                 }
+                                "Настройки" -> {
+                                    title = "Настройки" // Set title for settings
+                                }
                             }
                             drawerState.close()
                         }
@@ -65,10 +68,10 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
             }
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
-                if (showTeacherSchedule) {
-                    TeacherListScreen() // Ensure this is a valid Composable call
-                } else {
-                    GroupScheduleScreen(sharedPreferences)
+                when {
+                    showTeacherSchedule -> TeacherListScreen(sharedPreferences)
+                    title == "Настройки" -> SettingsScreen() // Navigate to Settings screen
+                    else -> GroupScheduleScreen(sharedPreferences)
                 }
             }
         }
@@ -87,6 +90,7 @@ fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
         Divider()
         DrawerItem("Расписание студентов", onItemSelected, onCloseDrawer)
         DrawerItem("Расписание преподавателей", onItemSelected, onCloseDrawer)
+        DrawerItem("Настройки", onItemSelected, onCloseDrawer) // New Settings Item
     }
 }
 
