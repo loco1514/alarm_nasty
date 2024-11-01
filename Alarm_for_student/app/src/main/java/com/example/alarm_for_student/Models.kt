@@ -15,3 +15,5 @@ data class DaySchedule(
 )
 
 data class Group(val name: String, val link: String)
+
+data class Teacher(val name: String, val link: String)
