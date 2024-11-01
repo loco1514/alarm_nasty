@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android") // Обновлена версия Kotlin
+    id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services") // Плагин Google Services
 }
 
 android {
@@ -65,10 +66,23 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3:1.2.0") // Material3 for icons
+    implementation("androidx.compose.material3:material3:1.2.0")
     implementation("androidx.compose.foundation:foundation:1.5.1")
     implementation("androidx.compose.material:material-icons-extended:1.5.0")
 
+    // Firebase Authentication
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-analytics-ktx:21.0.0")
+    implementation("com.google.android.gms:play-services-auth:20.3.0") // Для Google Sign-In
+    // Import the BoM for the Firebase platform
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+
+    // Add the dependency for the Firebase Authentication library
+    // When using the BoM, you don't specify versions in Firebase library dependencies
+    implementation("com.google.firebase:firebase-auth")
+
+    // Also add the dependency for the Google Play services library and specify its version
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // Jsoup for HTML parsing
     implementation("org.jsoup:jsoup:1.16.1")
@@ -95,4 +109,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-
