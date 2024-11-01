@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "135264571827",
+    "project_id": "liza-51eaa",
+    "storage_bucket": "liza-51eaa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:135264571827:android:425a38446f83930cb97bc6",
+        "android_client_info": {
+          "package_name": "com.example.alarm_for_student"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAbPkkjcdlIlO-25ThH-5atkuiVxug6BNw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
