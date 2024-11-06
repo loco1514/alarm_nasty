@@ -96,6 +96,8 @@ dependencies {
 
     // ViewModel support
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.7.3")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.7.3")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

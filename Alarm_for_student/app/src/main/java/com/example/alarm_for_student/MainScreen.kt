@@ -42,6 +42,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                     title = "Расписание преподавателей"
                                 }
                                 "Настройки" -> {
+
                                     title = "Настройки" // Set title for settings
                                 }
                             }
@@ -85,7 +86,6 @@ fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(16.dp)
         )
-        Divider()
         DrawerItem("Расписание студентов", onItemSelected, onCloseDrawer)
         DrawerItem("Расписание преподавателей", onItemSelected, onCloseDrawer)
         DrawerItem("Настройки", onItemSelected, onCloseDrawer) // New Settings Item
