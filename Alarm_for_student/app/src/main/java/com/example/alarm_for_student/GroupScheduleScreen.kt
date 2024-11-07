@@ -1,16 +1,25 @@
 package com.example.alarm_for_student
 
 import android.content.SharedPreferences
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -21,13 +30,14 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.select.Elements
 import java.lang.reflect.Type
-import java.time.LocalDate
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     var groups by remember { mutableStateOf(listOf<Group>()) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
     var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
+    var selectedDay by remember { mutableStateOf("Понедельник") } // Default day
     var showDialog by remember { mutableStateOf(false) }
     var showTutor by remember { mutableStateOf(true) } // Controls tutor visibility
     var showRoom by remember { mutableStateOf(true) }  // Controls room visibility
@@ -56,24 +66,33 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(8.dp)
+        ) {
         // Button for selecting a group
         TextButton(onClick = { showDialog = true }) {
             Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
         }
-
-        // Button for updating the schedule
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = {
-            selectedGroup?.let { group ->
-                coroutineScope.launch {
-                    daySchedules = fetchSchedule(group.link)
-                    saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
+            Button(onClick = {
+                selectedGroup?.let { group ->
+                    coroutineScope.launch {
+                        daySchedules = fetchSchedule(group.link)
+                        saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
+                    }
                 }
+            }) {
+                Text("Обновление")
             }
-        }) {
-            Text("Обновить расписание")
         }
+        Spacer(modifier = Modifier.height(5.dp))
+        DaySelector(
+            selectedDay = selectedDay,
+            onDayChange = { newDay -> selectedDay = newDay }
+        )
 
+        // Group Selection Dialog
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
@@ -105,64 +124,92 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
 
         if (daySchedules.isEmpty()) {
             Text(text = "Выберите группу для отображения расписания.")
         } else {
-            ScheduleContent(daySchedules, showTutor, showRoom)
+            // Show selected day's schedule
+            val selectedDaySchedule = daySchedules.find { it.day.equals(selectedDay, ignoreCase = true) }
+            ScheduleContent(
+                daySchedule = selectedDaySchedule,
+                showTutor = showTutor,
+                showRoom = showRoom
+            )
         }
     }
 }
 
 
-@Composable
-fun ScheduleContent(daySchedules: List<DaySchedule>, showTutor: Boolean, showRoom: Boolean) {
-    val currentDay = LocalDate.now().dayOfWeek.name.lowercase().capitalize()
 
-    val sortedDays = listOf(
-        "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"
+
+@Composable
+fun DaySelector(selectedDay: String, onDayChange: (String) -> Unit) {
+    val daysOfWeekFull = listOf(
+        "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"
     )
 
-    LazyColumn(modifier = Modifier.padding(16.dp)) {
-        item {
-            Text(text = "Расписание:", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(8.dp))
+    // Маппинг для сокращений
+    val daysOfWeekAbbreviated = listOf(
+        "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp) // Space between days
+    ) {
+        daysOfWeekAbbreviated.forEachIndexed { index, abbreviatedDay ->
+            TextButton(
+                onClick = { onDayChange(daysOfWeekFull[index]) }, // Отправляем полное название дня
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = if (daysOfWeekFull[index] == selectedDay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
+                )
+            ) {
+                Text(text = abbreviatedDay)
+            }
         }
+    }
+}
 
-        sortedDays.forEach { day ->
-            val daySchedule = daySchedules.find { it.day.equals(day, ignoreCase = true) }
-            item {
-                Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                    Text(
-                        text = day,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (daySchedule != null && daySchedule.day.equals(currentDay, ignoreCase = true))
-                            MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
 
-                    if (daySchedule != null && daySchedule.lessons.isNotEmpty()) {
-                        val groupedLessons = daySchedule.lessons.groupBy { it.time }
-                        groupedLessons.forEach { (time, lessons) ->
-                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                Text(text = "Время: $time", style = MaterialTheme.typography.bodyMedium)
-                                lessons.groupBy { it.subgroup ?: "Без подгруппы" }.forEach { (subgroup, subgroupLessons) ->
-                                    if (subgroupLessons.isNotEmpty()) {
-                                        Text(text = "Подгруппа: $subgroup", style = MaterialTheme.typography.bodyMedium)
-                                        subgroupLessons.forEach { lesson ->
-                                            LessonRow(lesson, showTutor, showRoom)
-                                        }
-                                    }
-                                }
+
+
+
+@Composable
+fun ScheduleContent(daySchedule: DaySchedule?, showTutor: Boolean, showRoom: Boolean) {
+    if (daySchedule == null || daySchedule.lessons.isEmpty()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Уроков нет.",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary)
+        }
+    } else {
+        LazyColumn(modifier = Modifier.padding(16.dp)) {
+            val groupedLessons = daySchedule.lessons.groupBy { it.time }
+            groupedLessons.forEach { (time, lessons) ->
+                item {
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        // Время
+                        Text(
+                            text = time,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        // Группировка по подгруппам
+                        lessons.groupBy { it.subgroup ?: "Без подгруппы" }.forEach { (subgroup, subgroupLessons) ->
+                            if (subgroup != "Без подгруппы") {
+                                Text(
+                                    text = "$subgroup п/г",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+                            subgroupLessons.forEach { lesson ->
+                                LessonRow(lesson, showTutor, showRoom)
                             }
                         }
-                    } else {
-                        Text(
-                            text = "Уроков нет.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
                     }
                 }
             }
@@ -171,22 +218,75 @@ fun ScheduleContent(daySchedules: List<DaySchedule>, showTutor: Boolean, showRoo
 }
 
 
+
 @Composable
 fun LessonRow(lesson: Lesson, showTutor: Boolean, showRoom: Boolean) {
+    // Обертка для урока
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp))
+            .shadow(4.dp, shape = RoundedCornerShape(12.dp)) // Тень для выделения
             .padding(16.dp)
     ) {
-        Text(text = "Дисциплина: ${lesson.subject}", style = MaterialTheme.typography.bodyMedium)
-        if (showTutor) Text(text = "Преподаватель: ${lesson.tutor}", style = MaterialTheme.typography.bodySmall)
-        if (showRoom) Text(text = "Аудитория: ${lesson.room}", style = MaterialTheme.typography.bodySmall)
-        Text(text = "Тип: ${lesson.type}", style = MaterialTheme.typography.bodySmall)
+        // Название дисциплины
+        Text(
+            text = "Дисциплина: ${lesson.subject}",
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        // Преподаватель (если включено)
+        if (showTutor) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Преподаватель",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Преподаватель: ${lesson.tutor}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        // Аудитория (если включено)
+        if (showRoom) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Place,
+                    contentDescription = "Аудитория",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Аудитория: ${lesson.room}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        // Тип занятия
+        Text(
+            text = "Тип: ${lesson.type}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
-    Spacer(modifier = Modifier.height(8.dp))
+
+    Spacer(modifier = Modifier.height(8.dp)) // Отступ между уроками
 }
+
+
+
 
 
 private suspend fun fetchGroups(): List<Group> {
