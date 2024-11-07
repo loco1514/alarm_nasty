@@ -34,7 +34,9 @@ import java.lang.reflect.Type
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
-    var groups by remember { mutableStateOf(listOf<Group>()) }
+    var groupedGroups by remember { mutableStateOf(mapOf<String, List<Group>>()) }
+    var selectedFaculty by remember { mutableStateOf<String?>(null) }
+    var filteredGroups by remember { mutableStateOf(listOf<Group>()) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
     var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
     var selectedDay by remember { mutableStateOf("Понедельник") } // Default day
@@ -44,21 +46,16 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     val gson = Gson()
     val coroutineScope = rememberCoroutineScope()
 
-    // Load settings for showTutor and showRoom from SharedPreferences (if stored)
+    // Load settings and initialize groups
     LaunchedEffect(Unit) {
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
-        groups = fetchGroups()
+        groupedGroups = fetchGroups()
 
-        // Deserialize schedule from JSON
-        val daySchedulesJson = sharedPreferences.getString("daySchedules", null)
-        val type: Type = object : TypeToken<List<DaySchedule>>() {}.type
-        if (daySchedulesJson != null) {
-            daySchedules = gson.fromJson(daySchedulesJson, type)
-        }
+        val allGroups = groupedGroups.values.flatten()
+        selectedGroup = allGroups.find { it.name == savedGroupName }
 
-        selectedGroup = groups.find { it.name == savedGroupName }
         if (daySchedules.isEmpty() && selectedGroup != null) {
             daySchedules = fetchSchedule(selectedGroup!!.link)
             saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
@@ -71,10 +68,10 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(8.dp)
         ) {
-        // Button for selecting a group
-        TextButton(onClick = { showDialog = true }) {
-            Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
-        }
+            // Faculty and Group Selection Button
+            TextButton(onClick = { showDialog = true }) {
+                Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
+            }
             Button(onClick = {
                 selectedGroup?.let { group ->
                     coroutineScope.launch {
@@ -92,27 +89,47 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             onDayChange = { newDay -> selectedDay = newDay }
         )
 
-        // Group Selection Dialog
+        // Group Selection Dialog with Faculty Filter
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                title = { Text(text = "Выберите группу") },
+                title = { Text(text = "Выберите факультет и группу") },
                 text = {
                     LazyColumn {
-                        items(groups) { group ->
-                            ListItem(
-                                modifier = Modifier.clickable {
-                                    selectedGroup = group
-                                    showDialog = false
+                        // Display faculties first
+                        groupedGroups.keys.forEach { faculty ->
+                            item {
+                                Text(
+                                    text = faculty,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    modifier = Modifier
+                                        .padding(8.dp)
+                                        .clickable {
+                                            selectedFaculty = faculty
+                                            filteredGroups = groupedGroups[faculty] ?: emptyList()
+                                        }
+                                )
 
-                                    // Fetch new schedule when group changes
-                                    coroutineScope.launch {
-                                        daySchedules = fetchSchedule(group.link)
-                                        saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
-                                    }
-                                },
-                                headlineContent = { Text(text = group.name) }
-                            )
+                            }
+
+                            // Display groups for selected faculty
+                            if (selectedFaculty == faculty) {
+                                items(filteredGroups) { group ->
+                                    ListItem(
+                                        modifier = Modifier.clickable {
+                                            selectedGroup = group
+                                            showDialog = false
+
+                                            // Fetch new schedule when group changes
+                                            coroutineScope.launch {
+                                                daySchedules = fetchSchedule(group.link)
+                                                saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
+                                            }
+                                        },
+                                        headlineContent = { Text(text = group.name) }
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -123,7 +140,6 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
                 }
             )
         }
-
 
         if (daySchedules.isEmpty()) {
             Text(text = "Выберите группу для отображения расписания.")
@@ -138,6 +154,7 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
         }
     }
 }
+
 
 
 
@@ -285,27 +302,49 @@ fun LessonRow(lesson: Lesson, showTutor: Boolean, showRoom: Boolean) {
     Spacer(modifier = Modifier.height(8.dp)) // Отступ между уроками
 }
 
-
-
-
-
-private suspend fun fetchGroups(): List<Group> {
+private suspend fun fetchGroups(): Map<String, List<Group>> {
     return withContext(Dispatchers.IO) {
         val groups = mutableListOf<Group>()
         try {
             val doc: Document = Jsoup.connect("https://rasp.ssuwt.ru/gs/faculties/").get()
-            val elements: Elements = doc.select("a[href^=/gs/faculties/timeline?grp=]")
-            for (element in elements) {
-                val name = element.text()
-                val link = "https://rasp.ssuwt.ru${element.attr("href")}"
-                groups.add(Group(name, link))
+
+            // Получаем все секции факультетов
+            val facultyElements: Elements = doc.select("a[id^=mark-][role=tab]")
+            val faculties = mutableMapOf<String, String>()
+
+            // Сопоставляем ID факультетов с их названиями
+            for (facultyElement in facultyElements) {
+                val facultyId = facultyElement.attr("id")
+                val facultyName = facultyElement.text()
+                faculties[facultyId] = facultyName
+            }
+
+            // Получаем группы для каждого факультета
+            for (facultyElement in facultyElements) {
+                val facultyId = facultyElement.attr("aria-controls")
+                val facultyName = facultyElement.text()
+
+                // Выбираем группы под этим факультетом
+                val groupElements: Elements = doc.select("#$facultyId a[href^=/gs/faculties/timeline?grp=]")
+
+                for (groupElement in groupElements) {
+                    val name = groupElement.text()
+                    val link = "https://rasp.ssuwt.ru${groupElement.attr("href")}"
+                    groups.add(Group(name, link, facultyName))
+                }
             }
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении групп: ${e.message}", e)
         }
-        groups
+
+        // Группируем и сортируем группы по факультетам
+        groups.groupBy { it.faculty }.mapValues { entry ->
+            entry.value.sortedBy { it.name }  // Сортируем группы внутри каждого факультета по алфавиту
+        }
     }
 }
+
+
 
 private suspend fun fetchSchedule(link: String): List<DaySchedule> {
     return withContext(Dispatchers.IO) {

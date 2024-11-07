@@ -14,6 +14,5 @@ data class DaySchedule(
     val lessons: List<Lesson>
 )
 
-data class Group(val name: String, val link: String)
-
+data class Group(val name: String, val link: String, val faculty: String)
 data class Teacher(val name: String, val link: String)

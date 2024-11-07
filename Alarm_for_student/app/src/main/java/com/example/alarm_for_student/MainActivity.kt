@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
 fun AppContent(sharedPreferences: SharedPreferences) {
     var isLoggedIn by remember { mutableStateOf(AuthUtils.isUserLoggedIn()) }
 
+    //MainScreen(sharedPreferences)
+
     if (isLoggedIn) {
         // Provide the required parameters for ScheduleContent
         val daySchedules = remember { listOf<DaySchedule>() } // Замените на фактические данные
