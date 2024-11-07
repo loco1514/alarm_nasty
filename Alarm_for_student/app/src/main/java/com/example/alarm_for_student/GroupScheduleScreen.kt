@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,7 +73,9 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             TextButton(onClick = { showDialog = true }) {
                 Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
             }
-            Button(onClick = {
+
+            // IconButton for update action
+            IconButton(onClick = {
                 selectedGroup?.let { group ->
                     coroutineScope.launch {
                         daySchedules = fetchSchedule(group.link)
@@ -80,9 +83,13 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
                     }
                 }
             }) {
-                Text("Обновление")
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Обновить расписание"
+                )
             }
         }
+
         Spacer(modifier = Modifier.height(5.dp))
         DaySelector(
             selectedDay = selectedDay,
@@ -109,7 +116,6 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
                                             filteredGroups = groupedGroups[faculty] ?: emptyList()
                                         }
                                 )
-
                             }
 
                             // Display groups for selected faculty
@@ -159,13 +165,13 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
 
 
 
+
 @Composable
 fun DaySelector(selectedDay: String, onDayChange: (String) -> Unit) {
     val daysOfWeekFull = listOf(
         "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"
     )
 
-    // Маппинг для сокращений
     val daysOfWeekAbbreviated = listOf(
         "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"
     )
@@ -173,21 +179,36 @@ fun DaySelector(selectedDay: String, onDayChange: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp) // Space between days
+            .padding(vertical = 10.dp), // уменьшенный padding вокруг Row
+        horizontalArrangement = Arrangement.spacedBy(2.dp) // уменьшенный отступ между кнопками
     ) {
         daysOfWeekAbbreviated.forEachIndexed { index, abbreviatedDay ->
-            TextButton(
-                onClick = { onDayChange(daysOfWeekFull[index]) }, // Отправляем полное название дня
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = if (daysOfWeekFull[index] == selectedDay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-                )
+            val isSelected = daysOfWeekFull[index] == selectedDay
+            Button(
+                onClick = { onDayChange(daysOfWeekFull[index]) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(6.dp), // уменьшенный padding внутри кнопок
+                modifier = Modifier
+                    .width(60.dp) // уменьшенная ширина кнопок
+                    .shadow(3.dp, RoundedCornerShape(4.dp))
+                    .background(
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(4.dp)
+                    )
             ) {
-                Text(text = abbreviatedDay)
+                Text(
+                    text = abbreviatedDay,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize // уменьшенный шрифт текста
+                )
             }
         }
     }
 }
+
 
 
 

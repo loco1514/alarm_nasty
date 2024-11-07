@@ -1,6 +1,8 @@
 package com.example.alarm_for_student
 
 import android.content.SharedPreferences
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -13,6 +15,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(sharedPreferences: SharedPreferences) {
@@ -36,6 +39,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                 "Расписание студентов" -> {
                                     showTeacherSchedule = false
                                     title = "Расписание студентов"
+
                                 }
                                 "Расписание преподавателей" -> {
                                     showTeacherSchedule = true
@@ -105,3 +109,5 @@ fun DrawerItem(title: String, onItemSelected: (String) -> Unit, onCloseDrawer: (
             .padding(16.dp)
     )
 }
+
+
