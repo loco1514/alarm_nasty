@@ -49,17 +49,33 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
 
     // Load settings and initialize groups
     LaunchedEffect(Unit) {
+        // Загружаем настройки из SharedPreferences
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
+
+        // Загружаем сохраненное имя группы из SharedPreferences
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
+
+        // Получаем список групп
         groupedGroups = fetchGroups()
 
+        // Получаем все группы из groupedGroups и ищем ту, которая соответствует savedGroupName
         val allGroups = groupedGroups.values.flatten()
         selectedGroup = allGroups.find { it.name == savedGroupName }
 
-        if (daySchedules.isEmpty() && selectedGroup != null) {
-            daySchedules = fetchSchedule(selectedGroup!!.link)
-            saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
+        // Если группа найдена, пытаемся загрузить расписание из SharedPreferences
+        val savedScheduleJson = sharedPreferences.getString("daySchedules", null)
+        if (savedScheduleJson != null) {
+            // Загружаем расписание из SharedPreferences
+            daySchedules = gson.fromJson(savedScheduleJson, object : TypeToken<List<DaySchedule>>() {}.type)
+        } else {
+            // Если расписания нет в SharedPreferences, получаем расписание для выбранной группы
+            if (selectedGroup != null) {
+                daySchedules = fetchSchedule(selectedGroup!!.link)
+
+                // Сохраняем расписание в SharedPreferences
+                saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
+            }
         }
     }
 
@@ -160,6 +176,7 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
         }
     }
 }
+
 
 
 

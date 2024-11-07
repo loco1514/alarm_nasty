@@ -39,7 +39,6 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                 "Расписание студентов" -> {
                                     showTeacherSchedule = false
                                     title = "Расписание студентов"
-
                                 }
                                 "Расписание преподавателей" -> {
                                     showTeacherSchedule = true
@@ -109,5 +108,3 @@ fun DrawerItem(title: String, onItemSelected: (String) -> Unit, onCloseDrawer: (
             .padding(16.dp)
     )
 }
-
-
