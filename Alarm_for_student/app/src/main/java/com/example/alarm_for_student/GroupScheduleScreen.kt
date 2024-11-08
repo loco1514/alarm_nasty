@@ -34,12 +34,11 @@ import java.lang.reflect.Type
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
+fun GroupScheduleScreen(sharedPreferences: SharedPreferences, daySchedules: List<DaySchedule>) {
     var groupedGroups by remember { mutableStateOf(mapOf<String, List<Group>>()) }
     var selectedFaculty by remember { mutableStateOf<String?>(null) }
     var filteredGroups by remember { mutableStateOf(listOf<Group>()) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
-    var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
     var selectedDay by remember { mutableStateOf("Понедельник") } // Default day
     var showDialog by remember { mutableStateOf(false) }
     var showTutor by remember { mutableStateOf(true) } // Controls tutor visibility
@@ -47,37 +46,42 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
     val gson = Gson()
     val coroutineScope = rememberCoroutineScope()
 
+    // Make daySchedules mutable so it can be updated
+    var daySchedules by remember { mutableStateOf(daySchedules) }
+
     // Load settings and initialize groups
     LaunchedEffect(Unit) {
-        // Загружаем настройки из SharedPreferences
+        // Load settings from SharedPreferences
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
 
-        // Загружаем сохраненное имя группы из SharedPreferences
-        val savedGroupName = sharedPreferences.getString("selectedGroupName", null)
-
-        // Получаем список групп
+        // Load saved group name from SharedPreferences and provide a default value if null
+        val savedGroupName = sharedPreferences.getString("selectedGroupName", null) ?: ""
+        Log.d("GroupScheduleScreen", "Loaded group name from SharedPreferences: $savedGroupName") // Log
         groupedGroups = fetchGroups()
 
-        // Получаем все группы из groupedGroups и ищем ту, которая соответствует savedGroupName
-        val allGroups = groupedGroups.values.flatten()
-        selectedGroup = allGroups.find { it.name == savedGroupName }
+        // Fetch the selected group directly with fetchGroups function
+        selectedGroup = findGroupInShedule(savedGroupName, groupedGroups)
 
-        // Если группа найдена, пытаемся загрузить расписание из SharedPreferences
+        Log.d("GroupScheduleScreen", "Selected group after search: ${selectedGroup?.name}") // Diagnostic log
+
+        // Load schedule from SharedPreferences if it exists, otherwise fetch it
         val savedScheduleJson = sharedPreferences.getString("daySchedules", null)
         if (savedScheduleJson != null) {
-            // Загружаем расписание из SharedPreferences
+            // Load schedule from SharedPreferences
             daySchedules = gson.fromJson(savedScheduleJson, object : TypeToken<List<DaySchedule>>() {}.type)
+            Log.d("GroupScheduleScreen", "Loaded schedule from SharedPreferences: $savedScheduleJson") // Log
         } else {
-            // Если расписания нет в SharedPreferences, получаем расписание для выбранной группы
+            // Fetch schedule for the selected group if not available in SharedPreferences
             if (selectedGroup != null) {
                 daySchedules = fetchSchedule(selectedGroup!!.link)
-
-                // Сохраняем расписание в SharedPreferences
+                // Save schedule to SharedPreferences
                 saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
+                Log.d("GroupScheduleScreen", "Schedule loaded for group ${selectedGroup!!.name}.") // Log
             }
         }
     }
+
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -88,21 +92,6 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             // Faculty and Group Selection Button
             TextButton(onClick = { showDialog = true }) {
                 Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
-            }
-
-            // IconButton for update action
-            IconButton(onClick = {
-                selectedGroup?.let { group ->
-                    coroutineScope.launch {
-                        daySchedules = fetchSchedule(group.link)
-                        saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
-                    }
-                }
-            }) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Обновить расписание"
-                )
             }
         }
 
@@ -175,6 +164,21 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences) {
             )
         }
     }
+}
+
+fun findGroupInShedule(
+    findGroup: String,
+    groupedGroups: Map<String, List<Group>>
+): Group? {
+    // Загружаем данные о группах
+    Log.d("GroupScheduleScreen", "Список групп из fetchGroups: ${groupedGroups.keys}") // Лог для диагностики
+
+    // Ищем группу по названию
+    val allGroups = groupedGroups.values.flatten()
+    val selectedGroup = allGroups.find { it.name == findGroup }
+
+    Log.d("GroupScheduleScreen", "Найденная группа: ${selectedGroup?.name ?: "Не найдена"}") // Лог для диагностики
+    return selectedGroup
 }
 
 
@@ -340,7 +344,7 @@ fun LessonRow(lesson: Lesson, showTutor: Boolean, showRoom: Boolean) {
     Spacer(modifier = Modifier.height(8.dp)) // Отступ между уроками
 }
 
-private suspend fun fetchGroups(): Map<String, List<Group>> {
+suspend fun fetchGroups(): Map<String, List<Group>> {
     return withContext(Dispatchers.IO) {
         val groups = mutableListOf<Group>()
         try {
@@ -384,21 +388,24 @@ private suspend fun fetchGroups(): Map<String, List<Group>> {
 
 
 
-private suspend fun fetchSchedule(link: String): List<DaySchedule> {
+suspend fun fetchSchedule(link: String): List<DaySchedule> {
     return withContext(Dispatchers.IO) {
         val daySchedulesMap = mutableMapOf<String, MutableList<Lesson>>()
         try {
             val doc: Document = Jsoup.connect(link).get()
+            Log.d("ScheduleDebug", "HTML документ успешно загружен.")
+
             val rows: Elements = doc.select("tr")
-            Log.d("ScheduleDebug", "Fetched rows: ${rows.size}")
+            Log.d("ScheduleDebug", "Обработано строк: ${rows.size}")
+
             for (row in rows) {
                 val cells = row.select("td")
                 if (cells.isEmpty()) continue
                 val time = cells.getOrNull(0)?.text()?.trim() ?: "Нет данных"
-                Log.d("ScheduleDebug", "Parsed time: $time")
+                Log.d("ScheduleDebug", "Парсинг времени: $time")
+
                 cells.forEachIndexed { index, cell ->
                     val lessonInfo = cell.text().trim()
-                    Log.d("ScheduleDebug", "Parsed lesson info: $lessonInfo for day index: $index")
                     if (lessonInfo.isEmpty()) return@forEachIndexed
                     val day = when (index) {
                         1 -> "Понедельник"
@@ -417,13 +424,15 @@ private suspend fun fetchSchedule(link: String): List<DaySchedule> {
                     }
                 }
             }
-            Log.d("ScheduleDebug", "Completed schedule parsing: $daySchedulesMap")
+            Log.d("ScheduleDebug", "Парсинг расписания завершен.")
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении расписания: ${e.message}", e)
         }
         daySchedulesMap.map { DaySchedule(it.key, it.value) }
     }
 }
+
+
 
 
 private fun parseLessonInfo(lessonInfo: String): List<Lesson> {
@@ -443,7 +452,7 @@ private fun parseLessonInfo(lessonInfo: String): List<Lesson> {
 }
 
 // Функция для сохранения расписания в SharedPreferences
-private fun saveScheduleToPreferences(
+fun saveScheduleToPreferences(
     sharedPreferences: SharedPreferences,
     groupName: String,
     daySchedules: List<DaySchedule>,
