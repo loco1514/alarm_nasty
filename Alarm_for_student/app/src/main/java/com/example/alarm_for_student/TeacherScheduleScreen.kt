@@ -74,20 +74,6 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
             TextButton(onClick = { showDialog = true }) {
                 Text(text = selectedTeacher?.name ?: "Выберите преподавателя", style = MaterialTheme.typography.bodyLarge)
             }
-
-            IconButton(onClick = {
-                selectedTeacher?.let { teacher ->
-                    coroutineScope.launch {
-                        daySchedules = fetchTeacherScheduleByDays(teacher.link)
-                        saveTeacherAndSchedule(sharedPreferences, teacher, daySchedules)
-                    }
-                }
-            }) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Обновить расписание"
-                )
-            }
         }
 
         Spacer(modifier = Modifier.height(5.dp))
