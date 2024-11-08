@@ -9,7 +9,7 @@ import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 
 // Функция для получения списка преподавателей с сайта
-suspend fun fetchTeachers(): List<Teacher> {
+suspend fun fetchTeachers(): MutableList<Teacher> {
     return withContext(Dispatchers.IO) {
         val teachers = mutableListOf<Teacher>()
         try {
@@ -31,51 +31,6 @@ suspend fun fetchTeachers(): List<Teacher> {
     }
 }
 
-// Функция для получения расписания преподавателя
-suspend fun fetchTeacherSchedule(link: String): List<Lesson> {
-    return withContext(Dispatchers.IO) {
-        val lessons = mutableListOf<Lesson>()
-        try {
-            val doc: Document = Jsoup.connect(link).get()
-            val lessonElements: Elements = doc.select(".cell")
-
-            if (lessonElements.isEmpty()) {
-                Log.d("TeacherScheduleDebug", "No lesson elements found for link: $link")
-                return@withContext lessons // Return empty if no lessons found
-            }
-
-            for (element in lessonElements) {
-                val type = element.select("span.type").text()
-                val subject = element.select("div.subject").text()
-                val room = element.select("div.room a").text()
-                val subgroup = element.select("div.subg").text()
-
-                if (type.isEmpty() || subject.isEmpty()) {
-                    Log.d("TeacherScheduleDebug", "Empty type or subject for element: ${element.html()}")
-                    continue // Skip empty entries
-                }
-
-                // Логируем всю информацию о уроке
-                Log.d("TeacherScheduleDebug", "Lesson found - Type: $type, Subject: $subject, Room: $room, Subgroup: $subgroup")
-
-                lessons.add(
-                    Lesson(
-                        time = "", // В дальнейшем можно будет добавить время
-                        type = type,
-                        subject = subject,
-                        room = room,
-                        tutor = "", // Наполните на основе вашей логики
-                        subgroup = subgroup.ifEmpty { null }
-                    )
-                )
-            }
-            Log.d("TeacherScheduleDebug", "Fetched ${lessons.size} lessons for link: $link")
-        } catch (e: Exception) {
-            Log.e("TeacherScheduleDebug", "Error fetching teacher's schedule: ${e.message}", e)
-        }
-        lessons
-    }
-}
 
 // Функция для получения расписания преподавателя по дням
 suspend fun fetchTeacherScheduleByDays(link: String): List<DaySchedule> {

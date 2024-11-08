@@ -72,7 +72,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
                 when {
-                    showTeacherSchedule -> TeacherListScreen(sharedPreferences)
+                    showTeacherSchedule -> TeacherScheduleScreen(sharedPreferences)
                     title == "Настройки" -> SettingsScreen(sharedPreferences) // Pass sharedPreferences to SettingsScreen
                     else -> GroupScheduleScreen(sharedPreferences)
                 }
