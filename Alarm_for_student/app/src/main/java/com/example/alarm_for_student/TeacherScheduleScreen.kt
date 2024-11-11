@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
@@ -36,22 +38,23 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
     var teachers by remember { mutableStateOf(listOf<Teacher>()) }
     var selectedTeacher by remember { mutableStateOf<Teacher?>(null) }
     var daySchedules by remember { mutableStateOf(listOf<DaySchedule>()) }
-    var selectedDay by remember { mutableStateOf("Понедельник") }
+    var selectedDay by remember { mutableStateOf(getCurrentDayOfWeek()) }
     var showDialog by remember { mutableStateOf(false) }
     var showTutor by remember { mutableStateOf(true) }
     var showRoom by remember { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
+    var weeksMap by remember { mutableStateOf(mapOf<Int, String>()) }
+    var selectedWeek by remember { mutableStateOf(1) } // Default to 1
 
-    // Gson instance for JSON serialization
     val gson = Gson()
 
-    // Load saved teacher and schedule from SharedPreferences
+    // LaunchedEffect to fetch current week in a coroutine
     LaunchedEffect(Unit) {
+        selectedWeek = getCurrentWeek() // This should be a suspend function call
         teachers = fetchTeachers()
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
 
-        // Load saved teacher and schedule if they exist
         val savedTeacherJson = sharedPreferences.getString("selectedTeacher", null)
         val savedScheduleJson = sharedPreferences.getString("daySchedules", null)
 
@@ -65,6 +68,29 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
         }
     }
 
+    LaunchedEffect(selectedTeacher) {
+        if (selectedTeacher != null) {
+            weeksMap = fetchWeeksTeacher(selectedTeacher!!.link)
+            selectedWeek?.let {
+                coroutineScope.launch {
+                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, it)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(selectedTeacher) {
+        if (selectedTeacher != null) {
+            weeksMap = fetchWeeksTeacher(selectedTeacher!!.link)
+            selectedWeek?.let {
+                coroutineScope.launch {
+                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, it)
+                }
+            }
+        }
+    }
+
+
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -77,9 +103,23 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
         }
 
         Spacer(modifier = Modifier.height(5.dp))
+        val dayDateMap = daySchedules.associate { it.day to it.date }
+
+        WeekSelectorTeacher(
+            selectedWeek = selectedWeek,
+            onWeekChange = { newWeek ->
+                selectedWeek = newWeek
+                coroutineScope.launch {
+                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, selectedWeek!!)
+                }
+            },
+            weeksMap = weeksMap
+        )
+
         DaySelector(
             selectedDay = selectedDay,
-            onDayChange = { newDay -> selectedDay = newDay }
+            onDayChange = { newDay -> selectedDay = newDay },
+            dayDateMap = dayDateMap
         )
 
         if (showDialog) {
@@ -93,7 +133,6 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
                                 modifier = Modifier.clickable {
                                     selectedTeacher = teacher
                                     showDialog = false
-
                                     coroutineScope.launch {
                                         daySchedules = fetchTeacherScheduleByDays(teacher.link)
                                         saveTeacherAndSchedule(sharedPreferences, teacher, daySchedules)
@@ -121,25 +160,73 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
     }
 }
 
-fun saveTeacherAndSchedule(
-    sharedPreferences: SharedPreferences,
-    teacher: Teacher,
-    schedules: List<DaySchedule>
+
+@Composable
+fun WeekSelectorTeacher(
+    selectedWeek: Int,
+    onWeekChange: (Int) -> Unit,
+    weeksMap: Map<Int, String>
 ) {
-    with(sharedPreferences.edit()) {
-        val gson = Gson()
-        putString("selectedTeacher", gson.toJson(teacher))
-        putString("daySchedules", gson.toJson(schedules))
-        apply()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = {
+                if (selectedWeek > 1) { // Предотвращаем уход ниже первой недели
+                    onWeekChange(selectedWeek - 1)
+                }
+            },
+            enabled = selectedWeek > 1 // Отключаем кнопку, если это первая неделя
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Предыдущая неделя"
+            )
+        }
+
+        Text(
+            text = "Неделя: $selectedWeek",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+
+        IconButton(
+            onClick = {
+                if (selectedWeek < (weeksMap.keys.maxOrNull() ?: selectedWeek)) { // Ограничиваем до максимальной недели
+                    onWeekChange(selectedWeek + 1)
+                }
+            },
+            enabled = selectedWeek < (weeksMap.keys.maxOrNull() ?: selectedWeek) // Отключаем кнопку, если последняя неделя
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = "Следующая неделя"
+            )
+        }
     }
 }
 
+
+fun saveTeacherAndSchedule(sharedPreferences: SharedPreferences, teacher: Teacher, daySchedules: List<DaySchedule>) {
+    val gson = Gson()
+    sharedPreferences.edit()
+        .putString("selectedTeacher", gson.toJson(teacher))
+        .putString("daySchedules", gson.toJson(daySchedules))
+        .apply()
+}
+
+
 @Composable
 fun ScheduleContentTeacher(daySchedule: DaySchedule?) {
-    if (daySchedule == null || daySchedule.lessons.isEmpty()) {
+    if (daySchedule == null || daySchedule.lessons.isEmpty() || daySchedule.lessons[0].subject == "Нет данных") {
+        // Отображаем сообщение о том, что нет пар
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Уроков нет.",
+                text = "Пар нет",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
@@ -156,6 +243,7 @@ fun ScheduleContentTeacher(daySchedule: DaySchedule?) {
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
+
                         lessons.groupBy { it.subgroup ?: "Без подгруппы" }.forEach { (subgroup, subgroupLessons) ->
                             if (subgroup != "Без подгруппы") {
                                 Text(
@@ -174,6 +262,7 @@ fun ScheduleContentTeacher(daySchedule: DaySchedule?) {
         }
     }
 }
+
 
 @Composable
 fun LessonRowTeacher(lesson: Lesson) {

@@ -11,6 +11,7 @@ data class Lesson(
 
 data class DaySchedule(
     val day: String,
+    val date: String,  // Add a date field to store the date
     val lessons: List<Lesson>
 )
 

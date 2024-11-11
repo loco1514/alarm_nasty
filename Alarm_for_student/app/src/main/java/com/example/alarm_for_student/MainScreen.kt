@@ -10,18 +10,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.Alignment
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
-
-@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun MainScreen(sharedPreferences: SharedPreferences) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -30,20 +28,22 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
     var title by remember { mutableStateOf("Расписание студентов") }
     var selectedGroup: Group? by remember { mutableStateOf(null) }
     var daySchedules by remember { mutableStateOf<List<DaySchedule>>(emptyList()) }
-    var isGroupLoaded by remember { mutableStateOf(false) } // Флаг для отслеживания загрузки группы
+    var selectedWeek by remember { mutableStateOf(1) } // Store selected week here
+    var weeksMap by remember { mutableStateOf(mapOf<Int, List<DaySchedule>>()) }
+    var savedGroupName by remember { mutableStateOf<String?>(null) }
+    var groupedGroups by remember { mutableStateOf(mapOf<String, List<Group>>()) } // Declare groupedGroups
 
-    var savedGroupName by remember { mutableStateOf<String?>(null) } // Declare savedGroupName here
-
-    // Загружаем выбранную группу из SharedPreferences
+    // Load schedule and selected group from SharedPreferences
     LaunchedEffect(Unit) {
         savedGroupName = sharedPreferences.getString("selectedGroupName", null)
-        // You might want to set isGroupLoaded = true here if this represents group loading completion.
-    }
+        selectedWeek = sharedPreferences.getInt("selectedWeek", 1)
 
-    // Проверка состояния перед рендером UI
-    if (!isGroupLoaded) {
-        // Вы можете показать индикатор загрузки или сообщение о том, что группа не загружена.
-        Log.d("MainScreen", "Группа ещё не загружена")
+        // Load schedule data from SharedPreferences if available
+        val savedWeeksJson = sharedPreferences.getString("weeksMap", null)
+        if (savedWeeksJson != null) {
+            weeksMap = Gson().fromJson(savedWeeksJson, object : TypeToken<Map<Int, List<DaySchedule>>>() {}.type)
+            daySchedules = weeksMap[selectedWeek] ?: emptyList()
+        }
     }
 
     ModalNavigationDrawer(
@@ -87,14 +87,21 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 IconButton(onClick = {
                                     coroutineScope.launch {
-                                        // Проверяем, что группа не null перед запросом расписания
-                                        var groupedGroups = fetchGroups()
+                                        groupedGroups = fetchGroups()
                                         selectedGroup = findGroupInShedule(savedGroupName.toString(), groupedGroups)
-                                        val newSchedules = fetchSchedule(selectedGroup!!.link)
-                                        Log.d("MainScreen", "Получено новое расписание.")
-                                        saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, newSchedules, Gson())
-                                        daySchedules = newSchedules
-                                        Log.d("MainScreen", "Состояние обновлено.")
+
+                                        if (selectedGroup != null) {
+                                            // Fetch and save the full weekly schedule
+                                            weeksMap = fetchWeeks(selectedGroup!!.link)
+                                            saveAllWeeksToPreferences(sharedPreferences, selectedGroup!!.name, weeksMap, Gson())
+
+                                            // Update daySchedules for the selected week
+                                            daySchedules = weeksMap[selectedWeek] ?: emptyList()
+
+                                            Log.d("MainScreen", "Полное расписание обновлено.")
+                                        } else {
+                                            Log.d("MainScreen", "Группа не найдена.")
+                                        }
                                     }
                                 }) {
                                     Icon(
@@ -119,16 +126,15 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                 when {
                     showTeacherSchedule -> TeacherScheduleScreen(sharedPreferences)
                     title == "Настройки" -> SettingsScreen(sharedPreferences)
-                    else -> GroupScheduleScreen(sharedPreferences, daySchedules)
+                    else -> GroupScheduleScreen(
+                        sharedPreferences = sharedPreferences,
+                        initialDaySchedules = daySchedules // Match parameters to GroupScheduleScreen
+                    )
                 }
             }
         }
     }
 }
-
-
-
-
 
 
 @Composable

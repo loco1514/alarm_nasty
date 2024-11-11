@@ -21,9 +21,7 @@ suspend fun fetchTeachers(): MutableList<Teacher> {
                 val link = "https://rasp.ssuwt.ru" + element.attr("href")
                 if (name.isEmpty()) continue
                 teachers.add(Teacher(name, link))
-                Log.d("TeacherListDebug", "Teacher Name: $name, Link: $link")
             }
-            Log.d("TeacherListDebug", "Парсинг завершен, найдено преподавателей: ${teachers.size}")
         } catch (e: Exception) {
             Log.e("TeacherListDebug", "Ошибка при получении списка преподавателей: ${e.message}", e)
         }
@@ -31,22 +29,62 @@ suspend fun fetchTeachers(): MutableList<Teacher> {
     }
 }
 
+suspend fun fetchWeeksTeacher(scheduleUrl: String): Map<Int, String> {
+    return withContext(Dispatchers.IO) {
+        val weeksMap = mutableMapOf<Int, String>()
+        try {
+            val doc: Document = Jsoup.connect(scheduleUrl).get()
+            val weekElements: Elements = doc.select("a[href^=?grp=][href*=week=]")
+            for (element in weekElements) {
+                val weekNumber = element.text().toIntOrNull()
+                if (weekNumber != null) {
+                    val weekLink = scheduleUrl + element.attr("href")
+                    weeksMap[weekNumber] = weekLink
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ScheduleDebug", "Ошибка при получении недель: ${e.message}", e)
+        }
+        weeksMap
+    }
+}
 
-// Функция для получения расписания преподавателя по дням
 suspend fun fetchTeacherScheduleByDays(link: String): List<DaySchedule> {
     return withContext(Dispatchers.IO) {
         val daySchedulesMap = mutableMapOf<String, MutableList<Lesson>>()
+        val dayDateMap = mutableMapOf<String, String>()
+
         try {
             val doc: Document = Jsoup.connect(link).get()
             val rows: Elements = doc.select("tr")
-            Log.d("ScheduleDebug", "Number of rows found: ${rows.size}")
+
+            val headerRow = doc.select("tr th")
+            headerRow.forEach { header ->
+                val headerHtml = header.html()
+                val parts = headerHtml.split("<br>")
+                if (parts.size == 2) {
+                    val day = parts[0].trim()
+                    val date = parts[1].trim()
+
+                    val dayNumber = date.split("-")[0].trim()
+
+                    when (day) {
+                        "Понедельник" -> dayDateMap["Понедельник"] = dayNumber
+                        "Вторник" -> dayDateMap["Вторник"] = dayNumber
+                        "Среда" -> dayDateMap["Среда"] = dayNumber
+                        "Четверг" -> dayDateMap["Четверг"] = dayNumber
+                        "Пятница" -> dayDateMap["Пятница"] = dayNumber
+                        "Суббота" -> dayDateMap["Суббота"] = dayNumber
+                        "Воскресенье" -> dayDateMap["Воскресенье"] = dayNumber
+                    }
+                }
+            }
 
             for (row in rows) {
                 val cells = row.select("td")
                 if (cells.isEmpty()) continue
 
                 val time = cells.getOrNull(0)?.text()?.trim() ?: "Нет данных"
-                Log.d("ScheduleDebug", "Processing time: $time")
 
                 cells.forEachIndexed { index, cell ->
                     val lessonInfo = cell.text().trim()
@@ -59,32 +97,48 @@ suspend fun fetchTeacherScheduleByDays(link: String): List<DaySchedule> {
                         4 -> "Четверг"
                         5 -> "Пятница"
                         6 -> "Суббота"
-                        7 -> "Воскресенье"
                         else -> return@forEachIndexed
                     }
 
-                    Log.d("ScheduleDebug", "Day: $day, Lesson Info: $lessonInfo")
                     val lessons = parseTeacherLessonInfo(lessonInfo, time)
                     lessons.forEach { lesson ->
-                        daySchedulesMap.getOrPut(day) { mutableListOf() }.add(lesson)
+                        val lessonWithTime = lesson.copy(time = time)
+                        daySchedulesMap.getOrPut(day) { mutableListOf() }.add(lessonWithTime)
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e("ScheduleDebug", "Ошибка при получении расписания: ${e.message}", e)
+            Log.e("ScheduleDebug", "Ошибка при загрузке расписания: ${e.message}", e)
         }
-        daySchedulesMap.map { DaySchedule(it.key, it.value) }
+
+        val allDaysOfWeek = listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
+
+        val result = allDaysOfWeek.map { day ->
+            val date = dayDateMap[day] ?: "Неизвестно"
+            val lessons = daySchedulesMap[day] ?: emptyList()
+
+            DaySchedule(
+                day = day,
+                date = date,
+                lessons = if (lessons.isEmpty()) {
+                    listOf(Lesson("Нет данных", "Нет данных", "Нет данных", "Нет данных", "Нет данных", null))
+                } else {
+                    lessons
+                }
+            )
+        }
+
+        result
     }
 }
 
-// Функция для парсинга информации о занятии
 private fun parseTeacherLessonInfo(lessonInfo: String, time: String): List<Lesson> {
     val regex = Regex(
-        """(?<type>лаб|лек|пр)\s+(?<subject>.+?)\s+(?<room>\d+/\w+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.[А-ЯЁ]\.)?\s*(подгруппа\s+(?<subgroup>\d+))?"""
+        """(?<type>лаб|лек|пр|конс|ЭКЗ|зач)\s+(?<subject>.+?)\s+(?<room>\d+/\w+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.[А-ЯЁ]\.)?\s*(подгруппа\s+(?<subgroup>\d+))?"""
     )
     return regex.findAll(lessonInfo).map { match ->
         Lesson(
-            time = time, // Привязываем время к занятию
+            time = time,
             type = match.groups["type"]?.value ?: "Неизвестно",
             subject = match.groups["subject"]?.value ?: "Неизвестно",
             room = match.groups["room"]?.value ?: "Неизвестно",
@@ -92,4 +146,9 @@ private fun parseTeacherLessonInfo(lessonInfo: String, time: String): List<Lesso
             subgroup = match.groups["subgroup"]?.value
         )
     }.toList()
+}
+
+suspend fun fetchTeacherScheduleByWeek(scheduleUrl: String, week: Int): List<DaySchedule> {
+    val weekUrl = "$scheduleUrl?week=$week"
+    return fetchTeacherScheduleByDays(weekUrl)
 }

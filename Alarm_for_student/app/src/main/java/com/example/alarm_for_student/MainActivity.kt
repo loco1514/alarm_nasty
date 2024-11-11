@@ -16,7 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.alarm_for_student.ui.theme.Alarm_for_studentTheme
 
-class MainActivity : ComponentActivity() {
+class  MainActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
 
     @RequiresApi(Build.VERSION_CODES.O)
