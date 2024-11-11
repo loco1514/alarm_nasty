@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
@@ -29,59 +31,52 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 import java.lang.reflect.Type
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun GroupScheduleScreen(sharedPreferences: SharedPreferences, daySchedules: List<DaySchedule>) {
+fun GroupScheduleScreen(sharedPreferences: SharedPreferences, initialDaySchedules: List<DaySchedule>) {
     var groupedGroups by remember { mutableStateOf(mapOf<String, List<Group>>()) }
     var selectedFaculty by remember { mutableStateOf<String?>(null) }
     var filteredGroups by remember { mutableStateOf(listOf<Group>()) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
-    var selectedDay by remember { mutableStateOf("Понедельник") } // Default day
+    var selectedDay by remember { mutableStateOf("Понедельник") }
+    var selectedWeek by remember { mutableStateOf(1) } // Изначально устанавливаем неделю как 1
+    var weeksMap by remember { mutableStateOf(mapOf<Int, String>()) }
     var showDialog by remember { mutableStateOf(false) }
-    var showTutor by remember { mutableStateOf(true) } // Controls tutor visibility
-    var showRoom by remember { mutableStateOf(true) }  // Controls room visibility
+    var showTutor by remember { mutableStateOf(true) }
+    var showRoom by remember { mutableStateOf(true) }
     val gson = Gson()
     val coroutineScope = rememberCoroutineScope()
+    var daySchedules by remember { mutableStateOf(initialDaySchedules) }
 
-    // Make daySchedules mutable so it can be updated
-    var daySchedules by remember { mutableStateOf(daySchedules) }
-
-    // Load settings and initialize groups
+    // Загружаем текущую неделю при инициализации компонента
     LaunchedEffect(Unit) {
-        // Load settings from SharedPreferences
+        selectedWeek = getCurrentWeek() // Устанавливаем текущую неделю
+        // Дальше логика загрузки групп, расписаний и т.д.
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
 
-        // Load saved group name from SharedPreferences and provide a default value if null
         val savedGroupName = sharedPreferences.getString("selectedGroupName", null) ?: ""
-        Log.d("GroupScheduleScreen", "Loaded group name from SharedPreferences: $savedGroupName") // Log
         groupedGroups = fetchGroups()
-
-        // Fetch the selected group directly with fetchGroups function
         selectedGroup = findGroupInShedule(savedGroupName, groupedGroups)
 
-        Log.d("GroupScheduleScreen", "Selected group after search: ${selectedGroup?.name}") // Diagnostic log
-
-        // Load schedule from SharedPreferences if it exists, otherwise fetch it
         val savedScheduleJson = sharedPreferences.getString("daySchedules", null)
         if (savedScheduleJson != null) {
-            // Load schedule from SharedPreferences
             daySchedules = gson.fromJson(savedScheduleJson, object : TypeToken<List<DaySchedule>>() {}.type)
-            Log.d("GroupScheduleScreen", "Loaded schedule from SharedPreferences: $savedScheduleJson") // Log
-        } else {
-            // Fetch schedule for the selected group if not available in SharedPreferences
-            if (selectedGroup != null) {
-                daySchedules = fetchSchedule(selectedGroup!!.link)
-                // Save schedule to SharedPreferences
-                saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
-                Log.d("GroupScheduleScreen", "Schedule loaded for group ${selectedGroup!!.name}.") // Log
-            }
+        } else if (selectedGroup != null) {
+            daySchedules = fetchSchedule(selectedGroup!!.link)
+            saveScheduleToPreferences(sharedPreferences, selectedGroup!!.name, daySchedules, gson)
         }
     }
 
+    LaunchedEffect(selectedGroup) {
+        if (selectedGroup != null) {
+            weeksMap = fetchWeeks(selectedGroup!!.link)
+        }
+    }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -89,26 +84,40 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences, daySchedules: List
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(8.dp)
         ) {
-            // Faculty and Group Selection Button
             TextButton(onClick = { showDialog = true }) {
-                Text(text = selectedGroup?.name ?: "Выберите группу", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = selectedGroup?.name ?: "Выберите группу",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
         }
 
+        WeekSelector(
+            selectedWeek = selectedWeek,
+            onWeekChange = { newWeek ->
+                selectedWeek = newWeek
+                coroutineScope.launch {
+                    val weekLink = weeksMap[newWeek] ?: selectedGroup!!.link
+                    daySchedules = fetchSchedule(weekLink)
+                }
+            },
+            weeksMap = weeksMap
+        )
+
         Spacer(modifier = Modifier.height(5.dp))
+
         DaySelector(
             selectedDay = selectedDay,
             onDayChange = { newDay -> selectedDay = newDay }
         )
 
-        // Group Selection Dialog with Faculty Filter
+
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
                 title = { Text(text = "Выберите факультет и группу") },
                 text = {
                     LazyColumn {
-                        // Display faculties first
                         groupedGroups.keys.forEach { faculty ->
                             item {
                                 Text(
@@ -122,16 +131,12 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences, daySchedules: List
                                         }
                                 )
                             }
-
-                            // Display groups for selected faculty
                             if (selectedFaculty == faculty) {
                                 items(filteredGroups) { group ->
                                     ListItem(
                                         modifier = Modifier.clickable {
                                             selectedGroup = group
                                             showDialog = false
-
-                                            // Fetch new schedule when group changes
                                             coroutineScope.launch {
                                                 daySchedules = fetchSchedule(group.link)
                                                 saveScheduleToPreferences(sharedPreferences, group.name, daySchedules, gson)
@@ -155,7 +160,6 @@ fun GroupScheduleScreen(sharedPreferences: SharedPreferences, daySchedules: List
         if (daySchedules.isEmpty()) {
             Text(text = "Выберите группу для отображения расписания.")
         } else {
-            // Show selected day's schedule
             val selectedDaySchedule = daySchedules.find { it.day.equals(selectedDay, ignoreCase = true) }
             ScheduleContent(
                 daySchedule = selectedDaySchedule,
@@ -185,6 +189,52 @@ fun findGroupInShedule(
 
 
 
+
+
+@Composable
+fun WeekSelector(selectedWeek: Int, onWeekChange: (Int) -> Unit, weeksMap: Map<Int, String>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = {
+                if (selectedWeek > 1) { // Предотвращаем уход ниже первой недели
+                    onWeekChange(selectedWeek - 1)
+                }
+            },
+            enabled = selectedWeek > 1 // Отключаем кнопку, если это первая неделя
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowBack,
+                contentDescription = "Предыдущая неделя"
+            )
+        }
+
+        Text(
+            text = "Неделя: $selectedWeek",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+
+        IconButton(
+            onClick = {
+                if (selectedWeek < weeksMap.keys.maxOrNull() ?: selectedWeek) { // Ограничиваем до максимальной недели
+                    onWeekChange(selectedWeek + 1)
+                }
+            },
+            enabled = selectedWeek < (weeksMap.keys.maxOrNull() ?: selectedWeek) // Отключаем кнопку, если последняя неделя
+        ) {
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = "Следующая неделя"
+            )
+        }
+    }
+}
 
 
 @Composable
@@ -230,6 +280,26 @@ fun DaySelector(selectedDay: String, onDayChange: (String) -> Unit) {
     }
 }
 
+
+suspend fun fetchWeeks(scheduleUrl: String): Map<Int, String> {
+    return withContext(Dispatchers.IO) {
+        val weeksMap = mutableMapOf<Int, String>()
+        try {
+            val doc: Document = Jsoup.connect(scheduleUrl).get()
+            val weekElements: Elements = doc.select("a[href^=?grp=][href*=week=]")
+            for (element in weekElements) {
+                val weekNumber = element.text().toIntOrNull()
+                if (weekNumber != null) {
+                    val weekLink = scheduleUrl + element.attr("href")
+                    weeksMap[weekNumber] = weekLink
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ScheduleDebug", "Ошибка при получении недель: ${e.message}", e)
+        }
+        weeksMap
+    }
+}
 
 
 
@@ -386,24 +456,16 @@ suspend fun fetchGroups(): Map<String, List<Group>> {
     }
 }
 
-
-
 suspend fun fetchSchedule(link: String): List<DaySchedule> {
     return withContext(Dispatchers.IO) {
         val daySchedulesMap = mutableMapOf<String, MutableList<Lesson>>()
         try {
             val doc: Document = Jsoup.connect(link).get()
-            Log.d("ScheduleDebug", "HTML документ успешно загружен.")
-
             val rows: Elements = doc.select("tr")
-            Log.d("ScheduleDebug", "Обработано строк: ${rows.size}")
-
             for (row in rows) {
                 val cells = row.select("td")
                 if (cells.isEmpty()) continue
                 val time = cells.getOrNull(0)?.text()?.trim() ?: "Нет данных"
-                Log.d("ScheduleDebug", "Парсинг времени: $time")
-
                 cells.forEachIndexed { index, cell ->
                     val lessonInfo = cell.text().trim()
                     if (lessonInfo.isEmpty()) return@forEachIndexed
@@ -414,7 +476,6 @@ suspend fun fetchSchedule(link: String): List<DaySchedule> {
                         4 -> "Четверг"
                         5 -> "Пятница"
                         6 -> "Суббота"
-                        7 -> "Воскресенье"
                         else -> return@forEachIndexed
                     }
                     val lessons = parseLessonInfo(lessonInfo)
@@ -424,19 +485,15 @@ suspend fun fetchSchedule(link: String): List<DaySchedule> {
                     }
                 }
             }
-            Log.d("ScheduleDebug", "Парсинг расписания завершен.")
         } catch (e: Exception) {
-            Log.e("ScheduleDebug", "Ошибка при получении расписания: ${e.message}", e)
+            Log.e("ScheduleDebug", "Ошибка при загрузке расписания: ${e.message}", e)
         }
-        daySchedulesMap.map { DaySchedule(it.key, it.value) }
+        daySchedulesMap.map { DaySchedule(day = it.key, lessons = it.value) }
     }
 }
 
-
-
-
 private fun parseLessonInfo(lessonInfo: String): List<Lesson> {
-    val regex = Regex("""(?<type>лаб|лек|пр)\s+(?<subject>.+?)\s+(?<room>\S+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.[А-ЯЁ]\.)(\s+(?<subgroup>\S+))?""")
+    val regex = Regex("""(?<type>лаб|лек|пр|конс|ЭКЗ|зач)\s+(?<subject>.+?)\s+(?<room>\S+)\s+(?<tutor>[А-ЯЁ][а-яё]+\s+[А-ЯЁ]\.[А-ЯЁ]\.)(\s+(?<subgroup>\S+))?""")
 
 
     return regex.findAll(lessonInfo).map { match ->
@@ -450,6 +507,31 @@ private fun parseLessonInfo(lessonInfo: String): List<Lesson> {
         )
     }.toList()
 }
+
+suspend fun getCurrentWeek(): Int {
+    return withContext(Dispatchers.IO) {
+        val url = "https://rasp.ssuwt.ru/gs/faculties/"
+        try {
+            val document: Document = Jsoup.connect(url).get()
+
+            // Находим элемент с классом "parity" или аналогичный элемент, который содержит информацию о текущей неделе
+            val parityElement = document.select("div.parity").firstOrNull()
+
+            // Извлекаем текст из найденного элемента
+            val parityText = parityElement?.text() ?: throw IllegalStateException("Не удалось найти элемент с классом 'parity'")
+
+            // Ищем номер недели в тексте, используя регулярное выражение
+            val weekNumber = Regex("(\\d+) учебная неделя").find(parityText)?.groupValues?.get(1)
+                ?: throw IllegalStateException("Не удалось найти номер недели в тексте")
+
+            weekNumber.toInt()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            throw e // Повторно выбрасываем исключение, если обработка не требуется
+        }
+    }
+}
+
 
 // Функция для сохранения расписания в SharedPreferences
 fun saveScheduleToPreferences(
