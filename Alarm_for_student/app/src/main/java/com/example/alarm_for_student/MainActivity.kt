@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.alarm_for_student.ui.theme.Alarm_for_studentTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
@@ -22,43 +23,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sharedPreferences = getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+
         setContent {
-            MaterialTheme {
-                // Передаем sharedPreferences в AppContent
-                AppContent(sharedPreferences)
+            Alarm_for_studentTheme {
+                MainScreen(sharedPreferences)
             }
         }
     }
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun AppContent(sharedPreferences: SharedPreferences) {
-    //var isLoggedIn by remember { mutableStateOf(AuthUtils.isUserLoggedIn()) }
-
-    MainScreen(sharedPreferences)
-
-    /*if (isLoggedIn) {
-        // Provide the required parameters for ScheduleContent
-        val daySchedules = remember { listOf<DaySchedule>() } // Замените на фактические данные
-        val showTutor = true // Установите на основе вашей логики
-        val showRoom = true // Установите на основе вашей логики
-
-        // Показываем основной контент после входа
-        MainScreen(sharedPreferences)
-    } else {
-        // Показываем экран входа
-        var isRegistering by remember { mutableStateOf(false) }
-
-        if (isRegistering) {
-            RegisterScreen {
-                isLoggedIn = true // Предполагая, что регистрация прошла успешно
-            }
-        } else {
-            LoginScreen(
-                onLoginSuccess = { isLoggedIn = true },
-                onNavigateToRegister = { isRegistering = true }
-            )
-        }
-    }*/
 }
