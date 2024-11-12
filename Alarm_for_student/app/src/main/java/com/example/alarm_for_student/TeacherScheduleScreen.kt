@@ -3,11 +3,11 @@ package com.example.alarm_for_student
 import android.content.SharedPreferences
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -70,6 +70,18 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
             val type = object : TypeToken<Map<Int, List<DaySchedule>>>() {}.type
             weeksMap = gson.fromJson(it, type)
             daySchedules = weeksMap[selectedWeek] ?: emptyList()
+        }
+    }
+
+    LaunchedEffect(selectedTeacher) {
+        selectedTeacher?.let { teacher ->
+            // После выбора преподавателя, выбираем сегодняшний день
+            selectedDay = getCurrentDayOfWeek()
+            coroutineScope.launch {
+                weeksMap = fetchWeeksTeacher(teacher.link) // Загрузка расписания для всех недель
+                daySchedules = weeksMap[selectedWeek] ?: emptyList() // Загружаем расписание для текущей недели
+                saveTeacherAndSchedule(sharedPreferences, teacher, weeksMap)
+            }
         }
     }
 
@@ -295,4 +307,3 @@ fun LessonRowTeacher(lesson: Lesson) {
 
     Spacer(modifier = Modifier.height(8.dp))
 }
-

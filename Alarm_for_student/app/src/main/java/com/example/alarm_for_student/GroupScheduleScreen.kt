@@ -73,8 +73,13 @@ fun GroupScheduleScreen(
     }
 
     // При изменении выбранной группы, загружаем все недели для этой группы
+    // При изменении выбранной группы, загружаем все недели для этой группы и устанавливаем текущую неделю
     LaunchedEffect(selectedGroup) {
         selectedGroup?.let { group ->
+            // Обновляем выбранную неделю на текущую
+            selectedWeek = getCurrentWeek()  // Получаем текущую неделю
+
+            // Загружаем данные по неделям
             val savedWeeksJson = sharedPreferences.getString("weeksMap_${group.name}", null)
             if (savedWeeksJson != null) {
                 weeksMap = gson.fromJson(savedWeeksJson, object : TypeToken<Map<Int, List<DaySchedule>>>() {}.type)
@@ -83,10 +88,11 @@ fun GroupScheduleScreen(
                 saveAllWeeksToPreferences(sharedPreferences, group.name, weeksMap, gson)
             }
 
-            // Если уже выбрана неделя, загружаем её расписание
+            // Загружаем расписание для текущей недели
             daySchedules = weeksMap[selectedWeek] ?: emptyList()
         }
     }
+
 
     // При изменении недели обновляем расписание для выбранной недели
     LaunchedEffect(selectedWeek) {

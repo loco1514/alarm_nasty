@@ -68,6 +68,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                 }
                                 "Настройки" -> {
                                     title = "Настройки"
+                                    showTeacherSchedule = false // Ensure that we're not showing the teacher schedule when in settings
                                 }
                             }
                             drawerState.close()
