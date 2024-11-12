@@ -2,7 +2,6 @@ package com.example.alarm_for_student
 
 import android.content.SharedPreferences
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,9 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,9 +25,6 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.select.Elements
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -43,79 +37,75 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
     var showTutor by remember { mutableStateOf(true) }
     var showRoom by remember { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
-    var weeksMap by remember { mutableStateOf(mapOf<Int, String>()) }
-    var selectedWeek by remember { mutableStateOf(1) } // Default to 1
+    var weeksMap by remember { mutableStateOf(mapOf<Int, List<DaySchedule>>()) }
+    var selectedWeek by remember { mutableStateOf(1) } // Инициализация значением по умолчанию
 
     val gson = Gson()
 
-    // LaunchedEffect to fetch current week in a coroutine
+    // Инициализация расписания и сохраненных данных
     LaunchedEffect(Unit) {
-        selectedWeek = getCurrentWeek() // This should be a suspend function call
+        selectedWeek = withContext(Dispatchers.IO) { getCurrentWeek() } // Вызов в корутине
         teachers = fetchTeachers()
         showTutor = sharedPreferences.getBoolean("showTutor", true)
         showRoom = sharedPreferences.getBoolean("showRoom", true)
 
+        // Загружаем сохраненные данные
         val savedTeacherJson = sharedPreferences.getString("selectedTeacher", null)
         val savedScheduleJson = sharedPreferences.getString("daySchedules", null)
+        val savedWeeksMapJson = sharedPreferences.getString("weeksMap", null)
 
+        // Если преподаватель сохранен, загружаем его
         savedTeacherJson?.let {
             selectedTeacher = gson.fromJson(it, Teacher::class.java)
         }
 
+        // Если расписание сохранено, загружаем его
         savedScheduleJson?.let {
             val type = object : TypeToken<List<DaySchedule>>() {}.type
             daySchedules = gson.fromJson(it, type)
         }
-    }
 
-    LaunchedEffect(selectedTeacher) {
-        if (selectedTeacher != null) {
-            weeksMap = fetchWeeksTeacher(selectedTeacher!!.link)
-            selectedWeek?.let {
-                coroutineScope.launch {
-                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, it)
-                }
-            }
+        // Если все расписания для недель сохранены, загружаем их
+        savedWeeksMapJson?.let {
+            val type = object : TypeToken<Map<Int, List<DaySchedule>>>() {}.type
+            weeksMap = gson.fromJson(it, type)
+            daySchedules = weeksMap[selectedWeek] ?: emptyList()
         }
     }
 
-    LaunchedEffect(selectedTeacher) {
-        if (selectedTeacher != null) {
-            weeksMap = fetchWeeksTeacher(selectedTeacher!!.link)
-            selectedWeek?.let {
-                coroutineScope.launch {
-                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, it)
-                }
-            }
-        }
+    LaunchedEffect(selectedWeek) {
+        // Обновляем расписание для выбранной недели
+        daySchedules = weeksMap[selectedWeek] ?: emptyList()
     }
-
 
     Column(modifier = Modifier.padding(16.dp)) {
+        // Компонент выбора преподавателя
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(8.dp)
         ) {
             TextButton(onClick = { showDialog = true }) {
-                Text(text = selectedTeacher?.name ?: "Выберите преподавателя", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = selectedTeacher?.name ?: "Выберите преподавателя",
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(5.dp))
         val dayDateMap = daySchedules.associate { it.day to it.date }
 
+        // Компонент выбора недели
         WeekSelectorTeacher(
             selectedWeek = selectedWeek,
             onWeekChange = { newWeek ->
                 selectedWeek = newWeek
-                coroutineScope.launch {
-                    daySchedules = fetchTeacherScheduleByWeek(selectedTeacher!!.link, selectedWeek!!)
-                }
             },
             weeksMap = weeksMap
         )
 
+        // Компонент выбора дня
         DaySelector(
             selectedDay = selectedDay,
             onDayChange = { newDay -> selectedDay = newDay },
@@ -132,11 +122,13 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
                             ListItem(
                                 modifier = Modifier.clickable {
                                     selectedTeacher = teacher
-                                    showDialog = false
                                     coroutineScope.launch {
-                                        daySchedules = fetchTeacherScheduleByDays(teacher.link)
-                                        saveTeacherAndSchedule(sharedPreferences, teacher, daySchedules)
+                                        selectedWeek = getCurrentWeek() // Инициализация текущей недели
+                                        weeksMap = fetchWeeksTeacher(teacher.link) // Загрузка расписания для всех недель
+                                        daySchedules = weeksMap[selectedWeek] ?: emptyList() // Загружаем расписание для текущей недели
+                                        saveTeacherAndSchedule(sharedPreferences, teacher, weeksMap)
                                     }
+                                    showDialog = false
                                 },
                                 headlineContent = { Text(text = teacher.name) }
                             )
@@ -160,12 +152,21 @@ fun TeacherScheduleScreen(sharedPreferences: SharedPreferences) {
     }
 }
 
+fun saveTeacherAndSchedule(sharedPreferences: SharedPreferences, teacher: Teacher, weeksMap: Map<Int, List<DaySchedule>>) {
+    val gson = Gson()
+    // Сохраняем преподавателя и расписания для всех недель
+    sharedPreferences.edit()
+        .putString("selectedTeacher", gson.toJson(teacher))
+        .putString("weeksMap", gson.toJson(weeksMap))
+        .apply()
+}
+
 
 @Composable
 fun WeekSelectorTeacher(
     selectedWeek: Int,
     onWeekChange: (Int) -> Unit,
-    weeksMap: Map<Int, String>
+    weeksMap: Map<Int, List<DaySchedule>>
 ) {
     Row(
         modifier = Modifier
@@ -210,16 +211,6 @@ fun WeekSelectorTeacher(
     }
 }
 
-
-fun saveTeacherAndSchedule(sharedPreferences: SharedPreferences, teacher: Teacher, daySchedules: List<DaySchedule>) {
-    val gson = Gson()
-    sharedPreferences.edit()
-        .putString("selectedTeacher", gson.toJson(teacher))
-        .putString("daySchedules", gson.toJson(daySchedules))
-        .apply()
-}
-
-
 @Composable
 fun ScheduleContentTeacher(daySchedule: DaySchedule?) {
     if (daySchedule == null || daySchedule.lessons.isEmpty() || daySchedule.lessons[0].subject == "Нет данных") {
@@ -263,7 +254,6 @@ fun ScheduleContentTeacher(daySchedule: DaySchedule?) {
     }
 }
 
-
 @Composable
 fun LessonRowTeacher(lesson: Lesson) {
     Column(
@@ -305,3 +295,4 @@ fun LessonRowTeacher(lesson: Lesson) {
 
     Spacer(modifier = Modifier.height(8.dp))
 }
+

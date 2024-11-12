@@ -12,8 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -216,8 +216,7 @@ fun GroupScheduleScreen(
 
 @RequiresApi(Build.VERSION_CODES.O)
 fun getCurrentDayOfWeek(): String {
-    val currentDay = LocalDate.now().dayOfWeek
-    return when (currentDay) {
+    return when (LocalDate.now().dayOfWeek) {
         java.time.DayOfWeek.MONDAY -> "Понедельник"
         java.time.DayOfWeek.TUESDAY -> "Вторник"
         java.time.DayOfWeek.WEDNESDAY -> "Среда"
@@ -261,7 +260,7 @@ fun WeekSelector(selectedWeek: Int, onWeekChange: (Int) -> Unit, weeksMap: Map<I
             enabled = selectedWeek > 1 // Отключаем кнопку, если это первая неделя
         ) {
             Icon(
-                imageVector = Icons.Default.ArrowBack,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Предыдущая неделя"
             )
         }
@@ -274,14 +273,14 @@ fun WeekSelector(selectedWeek: Int, onWeekChange: (Int) -> Unit, weeksMap: Map<I
 
         IconButton(
             onClick = {
-                if (selectedWeek < weeksMap.keys.maxOrNull() ?: selectedWeek) { // Ограничиваем до максимальной недели
+                if (selectedWeek < (weeksMap.keys.maxOrNull() ?: selectedWeek)) { // Ограничиваем до максимальной недели
                     onWeekChange(selectedWeek + 1)
                 }
             },
             enabled = selectedWeek < (weeksMap.keys.maxOrNull() ?: selectedWeek) // Отключаем кнопку, если последняя неделя
         ) {
             Icon(
-                imageVector = Icons.Default.ArrowForward,
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = "Следующая неделя"
             )
         }

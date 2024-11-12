@@ -29,19 +29,25 @@ suspend fun fetchTeachers(): MutableList<Teacher> {
     }
 }
 
-suspend fun fetchWeeksTeacher(scheduleUrl: String): Map<Int, String> {
+suspend fun fetchWeeksTeacher(scheduleUrl: String): Map<Int, List<DaySchedule>> {
     return withContext(Dispatchers.IO) {
-        val weeksMap = mutableMapOf<Int, String>()
+        val weeksMap = mutableMapOf<Int, List<DaySchedule>>()
         try {
             val doc: Document = Jsoup.connect(scheduleUrl).get()
-            val weekElements: Elements = doc.select("a[href^=?grp=][href*=week=]")
+            val weekElements: Elements = doc.select("a[href^=?prepid=][href*=week=]")
             for (element in weekElements) {
                 val weekNumber = element.text().toIntOrNull()
                 if (weekNumber != null) {
                     val weekLink = scheduleUrl + element.attr("href")
-                    weeksMap[weekNumber] = weekLink
+                    weeksMap[weekNumber] = fetchTeacherScheduleByDays(weekLink)
+                    val weekNew = getCurrentWeek()
+                    if (weekNew - weekNumber == 1){
+                        weeksMap[weekNew] = fetchTeacherScheduleByDays(scheduleUrl)
+                    }
                 }
             }
+            Log.d("weks", weeksMap[11].toString())
+            Log.d("weks", weeksMap[11].toString())
         } catch (e: Exception) {
             Log.e("ScheduleDebug", "Ошибка при получении недель: ${e.message}", e)
         }
