@@ -66,6 +66,9 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                                     showTeacherSchedule = true
                                     title = "Расписание преподавателей"
                                 }
+                                "Будильник" ->{
+                                    title = "Будильник"
+                                }
                                 "Настройки" -> {
                                     title = "Настройки"
                                     showTeacherSchedule = false // Ensure that we're not showing the teacher schedule when in settings
@@ -127,6 +130,7 @@ fun MainScreen(sharedPreferences: SharedPreferences) {
                 when {
                     showTeacherSchedule -> TeacherScheduleScreen(sharedPreferences)
                     title == "Настройки" -> SettingsScreen(sharedPreferences)
+                    title == "Будильник" -> AlarmScreen()
                     else -> GroupScheduleScreen(
                         sharedPreferences = sharedPreferences,
                         initialDaySchedules = daySchedules // Match parameters to GroupScheduleScreen
@@ -148,6 +152,7 @@ fun DrawerContent(onCloseDrawer: () -> Unit, onItemSelected: (String) -> Unit) {
         )
         DrawerItem("Расписание студентов", onItemSelected, onCloseDrawer)
         DrawerItem("Расписание преподавателей", onItemSelected, onCloseDrawer)
+        DrawerItem("Будильник", onItemSelected, onCloseDrawer)
         DrawerItem("Настройки", onItemSelected, onCloseDrawer)
     }
 }
