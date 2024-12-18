@@ -6,8 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.provider.Settings
-import android.widget.TimePicker
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,20 +33,18 @@ data class Alarm(
 enum class RepeatMode {
     NONE,
     WEEKLY,
-    BIWEEKLY,
     EVEN_WEEKS,
     ODD_WEEKS
 }
 
 enum class WeekDays {
-    MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY
+    ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС
 }
 
 @Composable
 fun AlarmScreen() {
     var alarms by remember { mutableStateOf(listOf<Alarm>()) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var showRepeatModeDialog by remember { mutableStateOf(false) }
+    var showAlarmDialog by remember { mutableStateOf(false) }
     var selectedAlarm by remember { mutableStateOf<Alarm?>(null) }
     val context = LocalContext.current
 
@@ -61,7 +57,7 @@ fun AlarmScreen() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(text = "Будильники", fontSize = 24.sp, color = MaterialTheme.colorScheme.primary)
-            IconButton(onClick = { showTimePicker = true }) {
+            IconButton(onClick = { selectedAlarm = null; showAlarmDialog = true }) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Добавить будильник", tint = MaterialTheme.colorScheme.primary)
             }
         }
@@ -80,7 +76,7 @@ fun AlarmScreen() {
                             cancelAlarm(context, alarm)
                         }
                     },
-                    onEdit = { selectedAlarm = alarm; showRepeatModeDialog = true },
+                    onEdit = { selectedAlarm = alarm; showAlarmDialog = true },
                     onDelete = {
                         cancelAlarm(context, alarm)
                         alarms = alarms.filter { it != alarm }
@@ -90,32 +86,16 @@ fun AlarmScreen() {
         }
     }
 
-    if (showRepeatModeDialog && selectedAlarm != null) {
-        ShowRepeatModeDialog(
+    if (showAlarmDialog) {
+        ShowAlarmDialog(
             context = context,
-            alarm = selectedAlarm!!,
-            onRepeatModeSelected = { repeatMode, selectedDays ->
-                selectedAlarm = selectedAlarm?.copy(repeatMode = repeatMode, repeatDays = selectedDays)
-                selectedAlarm?.let {
-                    alarms = alarms + it
-                    scheduleAlarm(context, it)
-                }
-                showRepeatModeDialog = false
+            initialAlarm = selectedAlarm,
+            onAlarmSaved = { alarm ->
+                alarms = alarms.filter { it != selectedAlarm } + alarm
+                scheduleAlarm(context, alarm)
+                showAlarmDialog = false
             },
-            onDismiss = { showRepeatModeDialog = false }
-        )
-    }
-
-    if (showTimePicker) {
-        ShowTimePickerDialog(
-            context = context,
-            onTimeSelected = { hour, minute ->
-                val formattedTime = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
-                selectedAlarm = Alarm(time = formattedTime)
-                showTimePicker = false
-                showRepeatModeDialog = true
-            },
-            onDismiss = { showTimePicker = false }
+            onDismiss = { showAlarmDialog = false }
         )
     }
 }
@@ -134,43 +114,96 @@ fun AlarmItem(
             .clickable { onEdit() },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = alarm.time, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+        // Время отдельно слева
+        Text(
+            text = alarm.time,
+            fontSize = 25.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(end = 16.dp)
+        )
+
+        // Информация о повторении в колонке
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
             Text(
                 text = "Повтор: ${when (alarm.repeatMode) {
                     RepeatMode.NONE -> "Нет"
                     RepeatMode.WEEKLY -> "Каждую неделю"
-                    RepeatMode.BIWEEKLY -> "Раз в две недели"
                     RepeatMode.EVEN_WEEKS -> "Четные недели"
                     RepeatMode.ODD_WEEKS -> "Нечетные недели"
                 }}",
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
+            if (alarm.repeatMode != RepeatMode.NONE && alarm.repeatDays.isNotEmpty()) {
+                Text(
+                    text = "${alarm.repeatDays.joinToString(", ")}",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
         }
-        Switch(checked = alarm.isEnabled, onCheckedChange = onToggle)
-        IconButton(onClick = onDelete) {
-            Icon(imageVector = Icons.Default.Delete, contentDescription = "Удалить будильник", tint = Color.Red)
+
+        // Переключатель и кнопка удаления
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Switch(checked = alarm.isEnabled, onCheckedChange = onToggle)
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Удалить будильник",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }
 
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowRepeatModeDialog(
+fun ShowAlarmDialog(
     context: Context,
-    alarm: Alarm,
-    onRepeatModeSelected: (RepeatMode, Set<String>) -> Unit,
+    initialAlarm: Alarm?,
+    onAlarmSaved: (Alarm) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var repeatMode by remember { mutableStateOf(alarm.repeatMode) }
-    var selectedDays by remember { mutableStateOf(alarm.repeatDays) }
+    var time by remember { mutableStateOf(initialAlarm?.time ?: "07:00") }
+    var repeatMode by remember { mutableStateOf(initialAlarm?.repeatMode ?: RepeatMode.NONE) }
+    var selectedDays by remember { mutableStateOf(initialAlarm?.repeatDays ?: emptySet()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Выберите повторение") },
+        title = { Text(text = "Настройка будильника") },
         text = {
             Column {
+                // Time Picker
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "Время: ", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        val calendar = Calendar.getInstance()
+                        val timePickerDialog = TimePickerDialog(
+                            context,
+                            { _, hour, minute ->
+                                time = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+                            },
+                            calendar.get(Calendar.HOUR_OF_DAY),
+                            calendar.get(Calendar.MINUTE),
+                            true
+                        )
+                        timePickerDialog.show()
+                    }) {
+                        Text(text = time, fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // Repeat mode selection
                 Text(text = "Режим повторения:", style = MaterialTheme.typography.bodyLarge)
                 RepeatMode.values().forEach { mode ->
@@ -183,7 +216,6 @@ fun ShowRepeatModeDialog(
                         Text(text = when (mode) {
                             RepeatMode.NONE -> "Нет"
                             RepeatMode.WEEKLY -> "Каждую неделю"
-                            RepeatMode.BIWEEKLY -> "Раз в две недели"
                             RepeatMode.EVEN_WEEKS -> "Четные недели"
                             RepeatMode.ODD_WEEKS -> "Нечетные недели"
                         })
@@ -191,7 +223,7 @@ fun ShowRepeatModeDialog(
                 }
 
                 // Days of week selection
-                if (repeatMode == RepeatMode.WEEKLY) {
+                if (repeatMode != RepeatMode.NONE) {
                     Text(text = "Выберите дни недели:", style = MaterialTheme.typography.bodyLarge)
                     WeekDays.values().forEach { day ->
                         Row(
@@ -213,7 +245,15 @@ fun ShowRepeatModeDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onRepeatModeSelected(repeatMode, selectedDays) }) {
+            TextButton(onClick = {
+                onAlarmSaved(
+                    Alarm(
+                        time = time,
+                        repeatMode = repeatMode,
+                        repeatDays = selectedDays
+                    )
+                )
+            }) {
                 Text("Сохранить")
             }
         },
@@ -223,29 +263,6 @@ fun ShowRepeatModeDialog(
             }
         }
     )
-}
-
-@Composable
-fun ShowTimePickerDialog(
-    context: Context,
-    onTimeSelected: (Int, Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val calendar = Calendar.getInstance()
-    val initialHour = calendar.get(Calendar.HOUR_OF_DAY)
-    val initialMinute = calendar.get(Calendar.MINUTE)
-
-    val timePickerDialog = remember {
-        TimePickerDialog(
-            context,
-            { _, hour, minute -> onTimeSelected(hour, minute) },
-            initialHour,
-            initialMinute,
-            true
-        )
-    }
-
-    timePickerDialog.show()
 }
 
 @SuppressLint("ScheduleExactAlarm")
@@ -260,11 +277,6 @@ fun scheduleAlarm(context: Context, alarm: Alarm) {
 
         // Adjust for repeat mode
         when (alarm.repeatMode) {
-            RepeatMode.BIWEEKLY -> {
-                if (get(Calendar.WEEK_OF_YEAR) % 2 != 0) {
-                    add(Calendar.WEEK_OF_YEAR, 1) // Start on next even week
-                }
-            }
             RepeatMode.EVEN_WEEKS -> {
                 if (get(Calendar.WEEK_OF_YEAR) % 2 != 0) {
                     add(Calendar.WEEK_OF_YEAR, 1)
@@ -286,7 +298,7 @@ fun scheduleAlarm(context: Context, alarm: Alarm) {
     val intent = Intent(context, AlarmReceiver::class.java).apply {
         putExtra("alarmTime", alarm.time)
         putExtra("repeatMode", alarm.repeatMode.name)
-        putExtra("repeatDays", alarm.repeatDays.toTypedArray())  // Передаем дни недели
+        putExtra("repeatDays", alarm.repeatDays.toTypedArray())
     }
     val pendingIntent = PendingIntent.getBroadcast(
         context,
@@ -303,7 +315,7 @@ fun scheduleAlarm(context: Context, alarm: Alarm) {
             alarmManager.setRepeating(
                 AlarmManager.RTC_WAKEUP,
                 calendar.timeInMillis,
-                AlarmManager.INTERVAL_DAY * 7, // Weekly interval
+                AlarmManager.INTERVAL_DAY * 7,
                 pendingIntent
             )
         }
